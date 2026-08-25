@@ -1,0 +1,25 @@
+{
+  "name": "pru-tms-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright + TypeScript automation suite for PRU TMS v4 (converted from PRU_TMS_Test_Cases_v4_By_Group CSV export)",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report",
+    "test:chromium": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "test:list": "playwright test --list",
+    "typecheck": "tsc --noEmit",
+    "codegen": "playwright codegen"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^20.14.0",
+    "dotenv": "^16.4.5",
+    "typescript": "^5.5.4"
+  }
+}
