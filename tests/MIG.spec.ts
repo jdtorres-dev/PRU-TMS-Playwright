@@ -25,9 +25,13 @@ test.describe('MIG - Modernized Migration and Batch Consistency', () => {
     // checkable is the rule's own stated consequence: the modernized store keeps every date
     // as a full four-digit year, so any date shown on screen is already 4-digit, never bare
     // two-digit.
+    // Live-confirmed: the Result Grid's "Updated At" column renders dates as "Aug 17, 2026,
+    // 11:59 AM" (a month-name format), not the slash/dash numeric formats these two patterns
+    // alone matched - broadened to catch the format actually on screen.
     const fullYearDate = page
       .getByText(/\b\d{1,2}[/-]\d{1,2}[/-](19|20)\d{2}\b/)
-      .or(page.getByText(/\b(19|20)\d{2}-\d{2}-\d{2}\b/));
+      .or(page.getByText(/\b(19|20)\d{2}-\d{2}-\d{2}\b/))
+      .or(page.getByText(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s*(19|20)\d{2}\b/));
     await expect(fullYearDate.first()).toBeVisible();
   });
 

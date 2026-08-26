@@ -1,5 +1,6 @@
 import { Locator, expect } from '@playwright/test';
 import { BasePage } from './BasePage';
+import { BASE_URL } from '../test-data/constants';
 
 export type SearchTab = 'CB Records' | 'Quality Review' | 'Non-CB Records';
 
@@ -8,6 +9,13 @@ export type SearchTab = 'CB Records' | 'Quality Review' | 'Non-CB Records';
  * Records tabs, their shared criteria controls, and the Result Grid the search produces.
  */
 export class ErrorManagerPage extends BasePage {
+  // Opening a record navigates away to /errors/{ECN}#... and a refused save leaves the app
+  // there (it does not return to the search screen on its own), so callers that need the
+  // search screen again must navigate back to it explicitly rather than assume it's current.
+  async goto(): Promise<void> {
+    await this.page.goto(`${BASE_URL}/errors`);
+  }
+
   async selectSearchTab(tab: SearchTab): Promise<void> {
     // exact: true - otherwise "CB Records" substring-matches "Non-CB Records" too.
     await this.page.getByRole('tab', { name: tab, exact: true }).click();
@@ -47,18 +55,30 @@ export class ErrorManagerPage extends BasePage {
 
   async viewRecords(): Promise<void> {
     // Steps text alternates between "View Records" and "Search" depending on which screen
-    // is being described; try whichever is present.
+    // is being described. The search form renders all three tabs' sections in the same DOM
+    // (only the active one is enabled), so both buttons can be present at once - a snapshot
+    // .count() check here raced with the page still rendering and could commit to whichever
+    // button doesn't exist on this tab, hanging until the click timeout. Waiting on the
+    // combined locator lets Playwright's own actionability auto-wait handle the timing.
+    //
+    // Live-confirmed bug: .first() alone picks DOM order, not "the enabled one" the comment
+    // above assumed. CB Records renders first in the DOM, so this happened to work whenever
+    // CB Records was the active tab; on Quality Review or Non-CB Records its own button is
+    // disabled but still comes first in the DOM, so .first() clicked that disabled button and
+    // hung until timeout. Disabled tabs are inherited from an ancestor <fieldset disabled>
+    // rather than each button's own disabled attribute, so :not(:disabled) (the CSS
+    // pseudo-class, not a [disabled] attribute selector) is required to exclude them.
     const viewBtn = this.page.getByRole('button', { name: /^View Records$/i });
     const searchBtn = this.page.getByRole('button', { name: /^Search$/i });
-    if (await viewBtn.count()) {
-      await viewBtn.click();
-    } else {
-      await searchBtn.click();
-    }
+    await viewBtn.or(searchBtn).and(this.page.locator(':not(:disabled)')).first().click();
   }
 
   resultGrid(): Locator {
-    return this.page.getByRole('grid').or(this.page.getByRole('table'));
+    // Live-confirmed: a search that legitimately returns zero rows renders a
+    // "No results found" message instead of any grid/table role element, so
+    // this must also match that empty state - otherwise a correctly-empty
+    // result is indistinguishable from the page never having loaded.
+    return this.page.getByRole('grid').or(this.page.getByRole('table')).or(this.page.getByText(/No results found/i));
   }
 
   async openFirstResultRow(): Promise<void> {

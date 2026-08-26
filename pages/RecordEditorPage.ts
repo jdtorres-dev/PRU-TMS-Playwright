@@ -44,6 +44,14 @@ export class RecordEditorPage extends BasePage {
 
   async clickCancel(): Promise<void> {
     await this.page.getByRole('button', { name: /^Cancel$/i }).click();
+    // Cancelling with pending field edits opens a "Discard changes?"
+    // confirmation on top of the editor - click through it so the record
+    // actually leaves Edit mode instead of leaving that modal stuck open
+    // (which then blocks the next Edit click).
+    const discardButton = this.page.getByRole('button', { name: /^Discard$/i });
+    if (await discardButton.count()) {
+      await discardButton.click();
+    }
   }
 
   async clickActions(): Promise<void> {
@@ -85,13 +93,20 @@ export class RecordEditorPage extends BasePage {
    */
   async openConfirmedTestRecord(): Promise<void> {
     const errorManager = new ErrorManagerPage(this.page);
+    // Reopening a record (e.g. after a refused save) starts from inside the record editor,
+    // not the search screen, so navigate back to Error Manager before searching again.
+    await errorManager.goto();
     // "Current Week" (the default scope) is week-relative, so switch to "All Weeks" first
     // so the search isn't time-sensitive.
     await errorManager.allWeeksRadio().check();
     await errorManager.policyNumberField().fill(TEST_POLICY_NUMBER);
     await errorManager.viewRecords();
+    // The Result Grid's Error column has been observed live rendering the control number as
+    // a link, a plain cell, or (current build) a button - matching all three keeps this
+    // resilient to that presentation detail rather than re-breaking on the next UI tweak.
     await this.page
       .getByRole('link', { name: new RegExp(`^${TEST_ERROR_ID}$`) })
+      .or(this.page.getByRole('button', { name: new RegExp(`^${TEST_ERROR_ID}$`) }))
       .or(this.page.getByRole('cell', { name: new RegExp(`^${TEST_ERROR_ID}$`) }))
       .first()
       .click();
