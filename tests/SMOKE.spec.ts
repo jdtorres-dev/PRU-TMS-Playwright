@@ -8,6 +8,11 @@ import { test, expect } from '../fixtures/pages.fixture';
  * "NOT VERIFIED" in the CSV itself, so per-test comments flag exactly which part of the row's
  * documented Expected Result checklist is not independently re-asserted here (the confirmed
  * navigable screen/tab is always asserted for real).
+ *
+ * Cross-checked against PRU_TMS_SMOKE_Organized_Steps.md.docx (the organized-steps reference
+ * for this group). Per that doc's own "POC Scope" column, TMS-SMOKE-001..014 are in scope
+ * ("POC Scope: no rule ref") and TMS-SMOKE-015..018 are marked "POC Scope: out of scope" -
+ * flagged individually on those four tests below.
  */
 test.describe('SMOKE - Screen load / cross-screen navigation', () => {
   test('TMS-SMOKE-001 - Error Manager - CB Records loads and presents its documented contents', async ({ page, loginPage, errorManagerPage }) => {
@@ -207,9 +212,10 @@ test.describe('SMOKE - Screen load / cross-screen navigation', () => {
   });
 
   /**
-   * TMS-SMOKE-015 | BR-009. The CSV's own Test Data/Steps key a value into a legacy mainframe
-   * field code ("MDLI22") with no counterpart in the modernized UI, so the literal step cannot
-   * be reproduced. What IS checked for real: the confirmed General Information screen (the
+   * TMS-SMOKE-015 | POC Scope: out of scope (per PRU_TMS_SMOKE_Organized_Steps.md.docx).
+   * BR-009. The CSV's own Test Data/Steps key a value into a legacy mainframe field code
+   * ("MDLI22") with no counterpart in the modernized UI, so the literal step cannot be
+   * reproduced. What IS checked for real: the confirmed General Information screen (the
    * screen this rule's position message would appear on) is reachable.
    */
   test('TMS-SMOKE-015 - BR-009: operator is told the browse position when browsing by policy', async ({ page, loginPage, recordEditorPage }) => {
@@ -221,8 +227,9 @@ test.describe('SMOKE - Screen load / cross-screen navigation', () => {
   });
 
   /**
-   * TMS-SMOKE-016 | BR-010. Same legacy-field gap as TMS-SMOKE-015 ("M1LI21" has no modern
-   * counterpart). What IS checked for real: General Information is reachable.
+   * TMS-SMOKE-016 | POC Scope: out of scope (per PRU_TMS_SMOKE_Organized_Steps.md.docx).
+   * BR-010. Same legacy-field gap as TMS-SMOKE-015 ("M1LI21" has no modern counterpart).
+   * What IS checked for real: General Information is reachable.
    */
   test('TMS-SMOKE-016 - BR-010: reason-suspension help is offered only where a reason identifier is present', async ({ loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
@@ -233,9 +240,10 @@ test.describe('SMOKE - Screen load / cross-screen navigation', () => {
   });
 
   /**
-   * TMS-SMOKE-017 | BR-018. The CSV's own Notes confirm no copy-menu screen (DA010D1/DA010R1)
-   * exists in the modernized app; this test asserts that absence directly rather than
-   * fabricating a walkthrough of a screen the modernization intentionally left out of scope.
+   * TMS-SMOKE-017 | POC Scope: out of scope (per PRU_TMS_SMOKE_Organized_Steps.md.docx).
+   * BR-018. The CSV's own Notes confirm no copy-menu screen (DA010D1/DA010R1) exists in the
+   * modernized app; this test asserts that absence directly rather than fabricating a
+   * walkthrough of a screen the modernization intentionally left out of scope.
    */
   test('TMS-SMOKE-017 - BR-018: legacy copy/duplication menus have no modernized counterpart', async ({ page, loginPage }) => {
     await loginPage.loginAsValidUser();
@@ -244,11 +252,11 @@ test.describe('SMOKE - Screen load / cross-screen navigation', () => {
   });
 
   /**
-   * TMS-SMOKE-018 | BR-019. The CSV's own Notes confirm the modern UI uses toasts + inline
-   * validation instead of a reserved screen-bottom message zone, so the legacy 3-line-zone
-   * behavior itself has no modern equivalent to test. What IS checked for real: attempting an
-   * invalid Save does surface a message to the operator, via whatever mechanism the modern UI
-   * uses.
+   * TMS-SMOKE-018 | POC Scope: out of scope (per PRU_TMS_SMOKE_Organized_Steps.md.docx).
+   * BR-019. The CSV's own Notes confirm the modern UI uses toasts + inline validation instead
+   * of a reserved screen-bottom message zone, so the legacy 3-line-zone behavior itself has no
+   * modern equivalent to test. What IS checked for real: attempting an invalid Save does
+   * surface a message to the operator, via whatever mechanism the modern UI uses.
    */
   test('TMS-SMOKE-018 - BR-019: system messages are surfaced to the operator via the modernized UI, not a legacy message zone', async ({ page, loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
