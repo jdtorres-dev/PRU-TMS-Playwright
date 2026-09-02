@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures/pages.fixture';
 import { LoginPage } from '../pages/LoginPage';
 import { RecordEditorPage } from '../pages/RecordEditorPage';
+import { TEST_POLICY_NUMBER } from '../test-data/constants';
 
 /**
  * PRU TMS - E2E group (E2E.csv, 35 rows, TMS-E2E-001..035).
@@ -247,12 +248,15 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
 
   test('TMS-E2E-014 - E2E-A14: Filter Results returns to the criteria with every keyed value intact', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
+    // "Current Week" (the default scope) is week-relative, so switch to "All Weeks" first
+    // so the search for a specific fixture record isn't time-sensitive.
+    await errorManagerPage.allWeeksRadio().check();
     const policyField = errorManagerPage.policyNumberField();
-    await policyField.fill('200000020');
+    await policyField.fill(TEST_POLICY_NUMBER);
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
     await page.getByRole('button', { name: /Filter Results/i }).click();
-    await expect(errorManagerPage.policyNumberField()).toHaveValue('200000020');
+    await expect(errorManagerPage.policyNumberField()).toHaveValue(TEST_POLICY_NUMBER);
   });
 
   test('TMS-E2E-015 - E2E-A15: the default population hides Released and Deleted work until the toggles are set', async ({ page, loginPage, errorManagerPage }) => {
@@ -303,23 +307,33 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
    */
   test('TMS-E2E-016 - E2E-A16: a saved filter is reapplied and its own Include settings override the remembered defaults', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
+    // "Current Week" (the default scope) is week-relative, so switch to "All Weeks" first
+    // so the search for a specific fixture record isn't time-sensitive.
+    await errorManagerPage.allWeeksRadio().check();
     const includeReleased = errorManagerPage.includeReleasedCheckbox();
     if (await includeReleased.count()) await includeReleased.check();
     const policyField = errorManagerPage.policyNumberField();
-    await policyField.fill('200000020');
+    await policyField.fill(TEST_POLICY_NUMBER);
     const saveFilterBtn = page.getByRole('button', { name: /Save Filter/i });
     if (await saveFilterBtn.count()) {
       await saveFilterBtn.click();
+      // A unique name per run: this shared dev environment retains saved filters across runs
+      // (the sidebar already accumulates dozens of past runs' entries), and the dialog
+      // refuses to save over an existing name, so a fixed literal would eventually collide.
+      const filterName = `QA automated saved filter ${Date.now()}`;
       const nameField = page.getByLabel(/Filter Name|Name/i);
-      if (await nameField.count()) await nameField.fill('QA automated saved filter');
-      const confirmBtn = page.getByRole('button', { name: /^(Save|Confirm)$/i });
+      if (await nameField.count()) await nameField.fill(filterName);
+      // Scoped to the dialog: its confirm button is literally labeled "Save filter", which
+      // the page's own "Save Filter" trigger button (still present behind the dialog) also
+      // matches, so an unscoped locator would be a strict-mode violation.
+      const confirmBtn = page.getByRole('dialog').getByRole('button', { name: /^(Save filter|Confirm)$/i });
       if (await confirmBtn.count()) await confirmBtn.click();
 
       if (await includeReleased.count()) await includeReleased.uncheck();
       await errorManagerPage.viewRecords();
       await expect(errorManagerPage.resultGrid()).toBeVisible();
 
-      const savedFilterOption = page.getByText(/QA automated saved filter/i);
+      const savedFilterOption = page.getByText(filterName, { exact: true });
       if (await savedFilterOption.count()) {
         await savedFilterOption.click();
         await expect(includeReleased).toBeChecked();

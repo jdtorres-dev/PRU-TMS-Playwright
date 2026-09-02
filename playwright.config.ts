@@ -6,7 +6,8 @@ import * as dotenv from 'dotenv';
 // the same defaults already baked into test-data/constants.ts).
 dotenv.config();
 
-const BASE_URL = process.env.PRU_BASE_URL ?? 'https://pru-tms-dev.ap-southeast-1.elasticbeanstalk.com';
+// const BASE_URL = process.env.PRU_BASE_URL ?? 'https://pru-tms-dev.ap-southeast-1.elasticbeanstalk.com';
+const BASE_URL = process.env.PRU_BASE_URL ?? 'https://pru-tms-demo.ap-southeast-1.elasticbeanstalk.com/';
 
 export default defineConfig({
   testDir: './tests',

@@ -2,7 +2,7 @@ import { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/pages.fixture';
 import { ErrorManagerPage } from '../pages/ErrorManagerPage';
 import { RecordEditorPage } from '../pages/RecordEditorPage';
-import { TEST_ECN } from '../test-data/constants';
+import { TEST_ECN, TEST_POLICY_NUMBER } from '../test-data/constants';
 
 /**
  * PRU TMS - GRID group (GRID.csv, 36 rows, TMS-GRID-001..036).
@@ -159,11 +159,11 @@ test.describe('GRID - Result Grid business rules', () => {
   test('TMS-GRID-012 - BR-256: pressing an unsupported key on the criteria screen is refused without losing keyed criteria', async ({ loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
     const policyField = errorManagerPage.policyNumberField();
-    await policyField.fill('200000020');
+    await policyField.fill(TEST_POLICY_NUMBER);
     // Press a key the modern criteria screen has no binding for.
     await policyField.press('F13').catch(() => {});
     // The keyed criteria must not have been erased by the unsupported key.
-    await expect(policyField).toHaveValue('200000020');
+    await expect(policyField).toHaveValue(TEST_POLICY_NUMBER);
   });
 
   test('TMS-GRID-013 - BR-258: the operator jumps straight to a known suspense identifier instead of paging through the list', async ({ page, loginPage }) => {
@@ -246,13 +246,16 @@ test.describe('GRID - Result Grid business rules', () => {
 
   test('TMS-GRID-020 - BR-272: the operator returns to the criteria they used, without re-keying, from any downstream screen', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
+    // "Current Week" (the default scope) is week-relative, so switch to "All Weeks" first
+    // so the search for a specific fixture record isn't time-sensitive.
+    await errorManagerPage.allWeeksRadio().check();
     const policyField = errorManagerPage.policyNumberField();
-    await policyField.fill('200000020');
+    await policyField.fill(TEST_POLICY_NUMBER);
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
     await page.getByRole('button', { name: /Filter Results/i }).click();
     // Every previously keyed value must be redisplayed, not re-keyed.
-    await expect(errorManagerPage.policyNumberField()).toHaveValue('200000020');
+    await expect(errorManagerPage.policyNumberField()).toHaveValue(TEST_POLICY_NUMBER);
   });
 
   test('TMS-GRID-021 - BR-284: where a search finds nothing, the operator is told plainly and criteria are kept intact', async ({ page, loginPage, errorManagerPage }) => {

@@ -45,7 +45,10 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // the same "nothing committed" outcome BR-282 and BRD V4.2 Criterion 4
     // require.
     await field.fill('ABCDE');
-    await page.getByRole('button', { name: /^Cancel$/i }).click();
+    // Cancel with unsaved changes opens a "Discard changes?" confirmation dialog that must
+    // be confirmed before edit mode actually exits - a plain Cancel click leaves it open and
+    // the background inert. cancelDialog() handles that confirmation.
+    await recordEditorPage.cancelDialog();
     await recordEditorPage.clickEdit();
     await expect(recordEditorPage.firstTextbox()).toHaveValue(before);
   });
@@ -54,14 +57,16 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     await loginPage.loginAsValidUser();
     await errorManagerPage.selectSearchTab('Quality Review');
     await errorManagerPage.allWeeksRadio().check();
-    // A policy number very unlikely to exist on this shared demo dataset, to
+    // A Program Run/Error Number very unlikely to exist on this shared demo dataset
+    // (Quality Review has no Policy Number field, see programRunErrorNumberField), to
     // genuinely exercise a zero-result search rather than assert a
     // fabricated message. The legacy condition code 7305 / exact modernized
     // wording is not independently confirmed here - asserts the directly
     // observable outcome: the search completes with an empty Result Grid.
-    await errorManagerPage.policyNumberField().fill('900000009');
+    await errorManagerPage.programRunErrorNumberField().fill('99999');
     await errorManagerPage.viewRecords();
-    await expect(page.getByRole('row')).toHaveCount(1); // header row only, no data rows
+    await expect(errorManagerPage.resultGridOrEmptyState()).toBeVisible();
+    await expect(page.getByRole('row')).toHaveCount(0);
   });
 
   test('TMS-PIRCS-QA-004 - BR-600: an accepted scope value is committed and no screening error is raised', async ({ page, loginPage, errorManagerPage }) => {
@@ -73,7 +78,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // label on this tab. Confirms the reachable precondition instead: the
     // Quality Review screen this filter's validation would run on opens
     // successfully with its shared search affordance present.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-005 - BR-600 (negative): a scope value over 1 character is refused with code 7111 and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -89,7 +96,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     await errorManagerPage.selectSearchTab('Quality Review');
     // `week` (condition: scope = SPECIFIC_WEEK) has no confirmed UI label on
     // this tab. Confirms the reachable precondition instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-007 - BR-601 (negative): a week value over 6 characters is refused with code 7111 and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -104,7 +113,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     await errorManagerPage.selectSearchTab('Quality Review');
     // `weekFrom` (condition: scope = WEEK_RANGE) has no confirmed UI label
     // on this tab. Confirms the reachable precondition instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-009 - BR-602 (negative): a weekFrom value over 6 characters is refused with code 7111 and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -120,7 +131,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // `weekTo` (condition: scope = WEEK_RANGE, weekTo >= weekFrom) has no
     // confirmed UI label on this tab. Confirms the reachable precondition
     // instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-011 - BR-603 (negative): a weekTo value over 6 characters is refused with code 7111 and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -135,7 +148,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     await errorManagerPage.selectSearchTab('Quality Review');
     // `runNumber` (numeric(2), both chars non-space) has no confirmed UI
     // label on this tab. Confirms the reachable precondition instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-013 - BR-604 (negative): breaching the runNumber both-chars-non-space constraint is refused and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -151,7 +166,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // This is a cross-field rule over the week-scope controls, which have no
     // confirmed UI labels/roles distinguishing the four options on this tab.
     // Confirms the reachable precondition instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-015 - BR-605 (negative): selecting more than one week-scope option is refused and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -167,7 +184,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // Cross-field rule over weekFrom/weekTo, which have no confirmed UI
     // labels on this tab (see TMS-PIRCS-QA-008/010). Confirms the reachable
     // precondition instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-017 - BR-606 (negative): fromWeekCycle > toWeekCycle is refused and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -184,7 +203,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // recordCode, transCode, transMode, district, debit, policyNumber), none
     // confirmed to have a live UI label matching these exact names on this
     // tab. Confirms the reachable precondition instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-019 - BR-607 (negative): a filter value breaching the wildcard/prefix semantics is refused and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -199,7 +220,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     await errorManagerPage.selectSearchTab('Quality Review');
     // Same runNumber field-mapping gap as TMS-PIRCS-QA-012/013 (BR-604
     // documents the same underlying constraint).
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-021 - BR-608 (negative): breaching the runNumber full-2-char guard is refused and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -215,7 +238,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // The fast-forward ECN quick-search field/prefix table (ref_program_run)
     // has no confirmed UI label on this tab. Confirms the reachable
     // precondition instead.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-023 - BR-609 (negative): a fast-forward ECN quick-search value with an invalid run-program prefix is refused and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
@@ -232,7 +257,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     // tab, and the condition (numeric-check failure) requires keying a
     // specific non-numeric value into it. Confirms the reachable
     // precondition instead: the screen this validation would run on opens.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-025 - BR-611: a non-numeric "Rejects from Week" cycle value is refused with code 7323', async ({ page, loginPage, errorManagerPage }) => {
@@ -240,7 +267,9 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     await errorManagerPage.selectSearchTab('Quality Review');
     // Same field-mapping gap as TMS-PIRCS-QA-024, for the "Rejects from
     // Week" field.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-026 - BR-612: a non-numeric "Rejects to Week" cycle value is refused with code 7324', async ({ page, loginPage, errorManagerPage }) => {
@@ -248,25 +277,30 @@ test.describe('PIRCS-QA - Field validation and search-filter rules', () => {
     await errorManagerPage.selectSearchTab('Quality Review');
     // Same field-mapping gap as TMS-PIRCS-QA-024, for the "Rejects to Week"
     // field.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-027 - BR-613: "Rejects from Week" greater than "Rejects to Week" is refused with code 7325', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
     await errorManagerPage.selectSearchTab('Quality Review');
     // Same "Rejects from/to Week" field-mapping gap as TMS-PIRCS-QA-025/026.
-    await expect(page.getByRole('button', { name: /^View Records$/i }).or(page.getByRole('button', { name: /^Search$/i }))).toBeVisible();
+    // "View Records" is the Quality Review tab's own action button; the "Search" button
+    // seen elsewhere on this page belongs to the (disabled, inactive) Non-CB Records panel.
+    await expect(page.getByRole('button', { name: /^View Records$/i })).toBeVisible();
   });
 
   test('TMS-PIRCS-QA-028 - BR-614: no records on the Error Suspense File for the selection specified reports code 7326', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
     await errorManagerPage.selectSearchTab('Quality Review');
     await errorManagerPage.allWeeksRadio().check();
-    await errorManagerPage.policyNumberField().fill('900000009');
+    await errorManagerPage.programRunErrorNumberField().fill('99999');
     await errorManagerPage.viewRecords();
     // Same treatment as TMS-PIRCS-QA-003: genuinely exercises a zero-result
     // search; the specific legacy condition code 7326 / exact wording is not
     // independently confirmed.
-    await expect(page.getByRole('row')).toHaveCount(1);
+    await expect(errorManagerPage.resultGridOrEmptyState()).toBeVisible();
+    await expect(page.getByRole('row')).toHaveCount(0);
   });
 });

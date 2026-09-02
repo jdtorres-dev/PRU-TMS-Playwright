@@ -8,10 +8,17 @@ import { test, expect } from '../fixtures/pages.fixture';
  *
  * Verification gaps (both flagged inline and summarized here):
  * - TMS-ERRTAX-001/002 (BR-340): the CSV names ~13 distinct machine-readable refusal codes;
- *   only NO_FILTERS_SET is reproducible purely through this UI without seeded backend
- *   conditions (terminal-state records, pending-transfer records, etc.), so it is used as the
- *   concrete instance of the taxonomy. The exact copy/wording shown on refusal has not been
- *   independently confirmed live; the assertion matches on the CSV's own Expected Message text.
+ *   most require seeded backend conditions (terminal-state records, pending-transfer records,
+ *   etc.) this suite doesn't have. NO_FILTERS_SET and NO_ROWS_SELECTED were the two candidates
+ *   reproducible purely through this UI, but confirmed live neither actually reaches a
+ *   post-submit refusal: the search screen always carries a week-cycle scope (Current Week is
+ *   checked by default and "Clear Filters" does not uncheck it, so an unscoped search can
+ *   never be submitted), and the Result Grid's bulk-action buttons (Resolve/Assign/Delete)
+ *   render only once a row is selected, so a zero-row bulk action has no button to click in
+ *   the first place. Both preconditions are enforced by omission - the UI never lets the
+ *   forbidden request be submitted - rather than by a named-rule refusal after submission, so
+ *   what's verified below is that structural prevention, not the NO_FILTERS_SET /
+ *   NO_ROWS_SELECTED response text.
  * - TMS-ERRTAX-003/004 (BR-341): this suite has no seeded record with a positive pending-
  *   corrections count, so the exact CANNOT_DELETE_WITH_PENDING_CORRECTIONS message/response
  *   is not directly triggered. What IS verified is the structural precondition the rule
@@ -20,28 +27,45 @@ import { test, expect } from '../fixtures/pages.fixture';
  *   discarded.
  */
 test.describe('ERRTAX - Modernized Error Taxonomy', () => {
-  test('TMS-ERRTAX-001 - BR-340: every write refused for a named business reason carries back a distinct, machine-readable rule name alongside its message', async ({ page, loginPage, errorManagerPage }) => {
+  test('TMS-ERRTAX-001 - BR-340: every write refused for a named business reason carries back a distinct, machine-readable rule name alongside its message', async ({ loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
     await errorManagerPage.selectSearchTab('CB Records');
 
-    // Concrete, reproducible instance of the taxonomy this rule describes: NO_FILTERS_SET -
-    // "A search was submitted with no filter fields and no week-cycle scope selected."
-    await errorManagerPage.viewRecords();
+    // NO_FILTERS_SET's precondition (no filters and no week-cycle scope) can never arise:
+    // Current Week is checked by default and Clear Filters does not uncheck it.
+    await expect(errorManagerPage.currentWeekRadio()).toBeChecked();
+    await errorManagerPage.clearFiltersButton().click();
+    await expect(errorManagerPage.currentWeekRadio()).toBeChecked();
 
-    await expect(page.getByText(/no filter/i).or(page.getByText(/NO_FILTERS_SET/i))).toBeVisible();
+    // NO_ROWS_SELECTED's precondition (a bulk action with no rows selected) can also never
+    // arise: Resolve/Assign/Delete are not rendered until a row is selected, then they are.
+    await errorManagerPage.allWeeksRadio().check();
+    await errorManagerPage.viewRecords();
+    await expect(errorManagerPage.bulkActionButtons()).toHaveCount(0);
+    await errorManagerPage.resultGrid().getByRole('checkbox').nth(1).check();
+    await expect(errorManagerPage.bulkActionButtons().first()).toBeVisible();
   });
 
   test('TMS-ERRTAX-002 - BR-340 (negative): a forbidden write is refused and nothing is committed', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
     await errorManagerPage.selectSearchTab('CB Records');
 
+    // Attempt condition (a): submit with every filter cleared. The scope still defaults to
+    // Current Week, so this is refused nothing to submit - the operator stays on the same
+    // search screen and no rows are committed/displayed.
+    await errorManagerPage.clearFiltersButton().click();
     await errorManagerPage.viewRecords();
-
-    // Refused before any business logic executes further: the operator stays on the same
-    // unfiltered search screen and no results are committed/displayed.
     await expect(page).toHaveURL(/\/errors/);
-    await expect(page.getByText(/no filter/i).or(page.getByText(/NO_FILTERS_SET/i))).toBeVisible();
+    await expect(page.getByText(/current week/i)).toBeVisible();
     await expect(errorManagerPage.resultGrid().getByRole('row')).toHaveCount(0);
+
+    // Attempt condition (b): with records loaded and nothing selected, there is no bulk
+    // action control reachable to submit a zero-row request with. Submitting a search
+    // replaces the criteria controls with the Result Grid, so they must be reopened first.
+    await errorManagerPage.filterResultsButton().click();
+    await errorManagerPage.allWeeksRadio().check();
+    await errorManagerPage.viewRecords();
+    await expect(errorManagerPage.bulkActionButtons()).toHaveCount(0);
   });
 
   test('TMS-ERRTAX-003 - BR-341: a record carrying any correction the operator has not yet saved or discarded cannot be deleted', async ({ page, loginPage, recordEditorPage }) => {
@@ -77,9 +101,10 @@ test.describe('ERRTAX - Modernized Error Taxonomy', () => {
     // Discard the pending correction instead of saving it.
     await recordEditorPage.cancelDialog();
 
-    // The record is left exactly as it was: value reverted, same URL, and Delete reachable
-    // again now that no correction is pending.
-    await expect(firstField).toHaveValue(original);
+    // The record is left exactly as it was: value reverted (read via the read-only view's
+    // label/value pair, since exiting edit mode swaps the field back from an input to plain
+    // text), same URL, and Delete reachable again now that no correction is pending.
+    await expect(recordEditorPage.viewFieldValue('Policy Number')).toHaveText(original);
     await expect(page).toHaveURL(recordUrl);
     await expect(page.getByRole('button', { name: /^Actions$/i })).toBeVisible();
   });
