@@ -13,6 +13,7 @@
     "test:firefox": "playwright test --project=firefox",
     "test:webkit": "playwright test --project=webkit",
     "test:list": "playwright test --list",
+    "test:rdms-gen": "playwright test tests/RDMS-GEN.spec.ts --workers=1",
     "typecheck": "tsc --noEmit",
     "codegen": "playwright codegen"
   },

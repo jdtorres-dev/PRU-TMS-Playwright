@@ -2,6 +2,7 @@ import { test as base, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { ErrorManagerPage } from '../pages/ErrorManagerPage';
 import { RecordEditorPage } from '../pages/RecordEditorPage';
+import { AdminPage } from '../pages/AdminPage';
 
 /**
  * Extends the base Playwright test with one Page Object instance per screen, all bound to
@@ -20,6 +21,7 @@ type PageFixtures = {
   loginPage: LoginPage;
   errorManagerPage: ErrorManagerPage;
   recordEditorPage: RecordEditorPage;
+  adminPage: AdminPage;
 };
 
 export const test = base.extend<PageFixtures>({
@@ -31,6 +33,9 @@ export const test = base.extend<PageFixtures>({
   },
   recordEditorPage: async ({ page }, use) => {
     await use(new RecordEditorPage(page));
+  },
+  adminPage: async ({ page }, use) => {
+    await use(new AdminPage(page));
   },
 });
 

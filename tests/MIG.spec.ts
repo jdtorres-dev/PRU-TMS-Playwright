@@ -1,41 +1,82 @@
 import { test, expect } from '../fixtures/pages.fixture';
 
 /**
- * PRU TMS - MIG group (MIG.csv, 4 rows, TMS-MIG-001..004).
- * Converted from the PRU TMS v4 CSV export (2026-08-25). Each row's own Steps/Expected
- * Result column is implemented directly below; the source CSV is the system of record and
- * is not modified by this file.
+ * PRU TMS - MIG group (PRU_TMS_Test_Cases_v4.xlsx, MIG sheet, 4 rows, TMS-MIG-001..004).
+ * PRU_TMS_MIG_Organized_Steps.md documents the same 4 rows' approved step sequence. The xlsx
+ * is the system of record and is not modified by this file.
  *
- * Verification gaps (all four rows, flagged inline and summarized here): this whole group
- * documents batch-ingestion / build-pipeline / reference-data-migration rules (BR-342..345).
- * None of them expose a UI control in this session that can trigger the legacy ingestion
- * path, invoke the batch pipeline, or run the CI build-time drift check - there is simply no
- * screen or button for any of that in the online facility this suite drives. Each test below
- * instead asserts the strongest currently-checkable, real consequence or boundary the rule
- * implies on the live UI, per row.
+ * POC Scope (per the MIG sheet's own "POC Scope" column):
+ *   TMS-MIG-001 (BR-342) - phase-1 (mod-spec feature) - in scope, executes below.
+ *   TMS-MIG-002 (BR-343) - out of scope - kept, disabled via test.skip().
+ *   TMS-MIG-003 (BR-344) - out of scope - kept, disabled via test.skip().
+ *   TMS-MIG-004 (BR-345) - phase-1 (mod-spec feature) - in scope, executes below.
+ *
+ * Verification gap common to all four rows (flagged inline per row below): this whole group
+ * documents batch-ingestion / build-pipeline / reference-data-migration rules (BR-342..345)
+ * that govern the legacy-to-modernized migration and the online/batch pipeline pair - none of
+ * them expose a UI control in this session that can trigger the legacy ingestion path, invoke
+ * the batch pipeline, or run the CI build-time drift check; there is simply no screen or
+ * button for any of that in the online facility this suite drives. This is corroborated by
+ * the Business Rules Catalogue v4.2 itself, whose own "POC Scope" column for BR-342..345
+ * independently reads "Out of Scope" for all four (i.e. none of these rules is implemented
+ * online in this build), even though the Test Cases xlsx tags TMS-MIG-001/004 in scope for
+ * *test execution*. Each in-scope test below therefore asserts the strongest currently-
+ * checkable, real consequence the rule implies on the live UI rather than the rule's own
+ * ingestion-time/batch-time behavior - each is BLOCKED BY UNAVAILABLE TEST DATA in that
+ * narrower sense (see the conversion summary), not a full pass of the approved Expected
+ * Result end to end.
  */
 test.describe('MIG - Modernized Migration and Batch Consistency', () => {
-  test('TMS-MIG-001 - BR-342: a two-digit year on any historical record is expanded to a full year using the same rule the legacy facility applied', async ({ page, loginPage, errorManagerPage }) => {
+  test('TMS-MIG-001 - BR-342: a two-digit year on any historical record is expanded to a full year using the same rule the legacy facility applied', async ({ page, loginPage, recordEditorPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
-    await errorManagerPage.selectSearchTab('CB Records');
-    await errorManagerPage.allWeeksRadio().check();
-    await errorManagerPage.viewRecords();
+    await recordEditorPage.openConfirmedTestRecord();
+    await recordEditorPage.openRdmsTab('Additional Information');
 
-    // Not independently triggerable here (no ingestion control exists in this UI). What IS
-    // checkable is the rule's own stated consequence: the modernized store keeps every date
-    // as a full four-digit year, so any date shown on screen is already 4-digit, never bare
-    // two-digit.
-    // Live-confirmed: the Result Grid's "Updated At" column renders dates as "Aug 17, 2026,
-    // 11:59 AM" (a month-name format), not the slash/dash numeric formats these two patterns
-    // alone matched - broadened to catch the format actually on screen.
-    const fullYearDate = page
-      .getByText(/\b\d{1,2}[/-]\d{1,2}[/-](19|20)\d{2}\b/)
-      .or(page.getByText(/\b(19|20)\d{2}-\d{2}-\d{2}\b/))
-      .or(page.getByText(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s*(19|20)\d{2}\b/));
-    await expect(fullYearDate.first()).toBeVisible();
+    // Not independently triggerable here (no ingestion/migration control exists in this UI -
+    // see file header). What IS checkable: BR-342's own named Screen Field(s) per the
+    // Business Rules Catalogue v4.2 ("loanDate, effDatePolChg"), confirmed live via
+    // frontend-field-catalog.xlsx ("Dates & Identifiers" sheet) to be the "Loan Date" and
+    // "Effective Date Policy Change" fields on this Additional Information tab. Wherever
+    // either is populated on this already-migrated record, it must render as a full
+    // four-digit year (YYYY-MM-DD, the field catalog's declared type) - never a bare
+    // two-digit year - which is the rule's own stated storage guarantee.
+    const fourDigitYear = /\b(19|20)\d{2}\b/;
+    const namedDateFields = [page.getByLabel(/^Loan Date$/i), page.getByLabel(/^Effective Date Policy Change$/i)];
+
+    let checkedNamedField = false;
+    for (const field of namedDateFields) {
+      if (await field.count()) {
+        const value = await field.inputValue().catch(() => '');
+        if (value) {
+          expect(value, 'BR-342: expected a full four-digit year, never a bare two-digit year').toMatch(fourDigitYear);
+          checkedNamedField = true;
+        }
+      }
+    }
+
+    if (!checkedNamedField) {
+      // Neither named field carries a value on this shared fixture record: fall back to the
+      // rule's broader storage guarantee (every date the modernized store holds is four-digit)
+      // via the CB Records Result Grid's own rendered dates.
+      // Live-confirmed: the Result Grid's "Updated At" column renders dates as "Aug 17, 2026,
+      // 11:59 AM" (a month-name format), not the slash/dash numeric formats these two patterns
+      // alone matched - broadened to catch the format actually on screen.
+      await errorManagerPage.goto();
+      await errorManagerPage.selectSearchTab('CB Records');
+      await errorManagerPage.allWeeksRadio().check();
+      await errorManagerPage.viewRecords();
+      const fullYearDate = page
+        .getByText(/\b\d{1,2}[/-]\d{1,2}[/-](19|20)\d{2}\b/)
+        .or(page.getByText(/\b(19|20)\d{2}-\d{2}-\d{2}\b/))
+        .or(page.getByText(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s*(19|20)\d{2}\b/));
+      await expect(fullYearDate.first()).toBeVisible();
+    }
   });
 
-  test('TMS-MIG-002 - BR-343: the online facility and the batch pipeline write to the same store and must apply identical validation, checked automatically for drift', async ({ loginPage, recordEditorPage }) => {
+  // OUT OF SCOPE (reference: PRU_TMS_MIG_Organized_Steps.md / PRU_TMS_Test_Cases_v4.xlsx MIG
+  // sheet, TMS-MIG-002, POC Scope = out of scope) - kept, disabled via test.skip so it does not
+  // execute.
+  test.skip('TMS-MIG-002 - BR-343: the online facility and the batch pipeline write to the same store and must apply identical validation, checked automatically for drift', async ({ loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.openRdmsTab('General Information');
@@ -51,7 +92,10 @@ test.describe('MIG - Modernized Migration and Batch Consistency', () => {
     await recordEditorPage.cancelDialog();
   });
 
-  test('TMS-MIG-003 - BR-344: the derived transaction code the online facility computes for a record must agree exactly with the one the batch pipeline computes', async ({ page, loginPage, recordEditorPage }) => {
+  // OUT OF SCOPE (reference: PRU_TMS_MIG_Organized_Steps.md / PRU_TMS_Test_Cases_v4.xlsx MIG
+  // sheet, TMS-MIG-003, POC Scope = out of scope) - kept, disabled via test.skip so it does not
+  // execute.
+  test.skip('TMS-MIG-003 - BR-344: the derived transaction code the online facility computes for a record must agree exactly with the one the batch pipeline computes', async ({ page, loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
 
