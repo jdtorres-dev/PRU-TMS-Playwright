@@ -100,6 +100,18 @@ export class ErrorManagerPage extends BasePage {
     return this.page.getByRole('radio', { name: 'Current Week' });
   }
 
+  // Live-confirmed (2026-09-03) ids: scope-SPECIFIC_WEEK / scope-WEEK_RANGE. Neither radio
+  // carries a plain accessible name of its own from getByRole (the visible "Specific Week"/
+  // "Week Range" text sits next to it, same non-<label> pattern as policyNumberField()
+  // above), so these are located by id instead.
+  specificWeekRadio(): Locator {
+    return this.page.locator('#scope-SPECIFIC_WEEK');
+  }
+
+  weekRangeRadio(): Locator {
+    return this.page.locator('#scope-WEEK_RANGE');
+  }
+
   includeReleasedCheckbox(): Locator {
     return this.page.getByRole('checkbox', { name: /Include Released/i });
   }
@@ -112,7 +124,210 @@ export class ErrorManagerPage extends BasePage {
     return this.page.getByRole('button', { name: /^Clear Filters$/i });
   }
 
+  saveFilterButton(): Locator {
+    return this.page.getByRole('button', { name: /^Save Filter$/i });
+  }
+
   exportCsvButton(): Locator {
     return this.page.getByRole('button', { name: /Export CSV/i });
+  }
+
+  /**
+   * Deletes every currently-saved filter preset whose name matches `namePattern` (default:
+   * every "QA automated saved filter <timestamp>" preset this suite's own tests leave behind
+   * - see TMS-E2E-016). Live-confirmed: each Saved Filters chip carries its own delete button
+   * with an aria-label of "Delete <exact filter name>" and no confirmation dialog - clicking
+   * it removes the chip immediately. Deletes are looped one at a time (re-querying after each
+   * click, not caching a list up front) since removing one chip re-renders/re-flows the rest.
+   * Must be on the Error Manager search screen already (this does not call goto() itself).
+   */
+  async deleteSavedFiltersMatching(namePattern: RegExp = /QA automated saved filter/i): Promise<void> {
+    const deleteButtonPattern = new RegExp(`^Delete .*(${namePattern.source})`, 'i');
+    for (let guard = 0; guard < 25; guard++) {
+      const deleteBtn = this.page.getByRole('button', { name: deleteButtonPattern }).first();
+      if (!(await deleteBtn.count())) return;
+      await deleteBtn.click();
+      // No confirmation dialog - the click removes the chip immediately, but give the list a
+      // moment to re-render before the next iteration re-queries it.
+      await this.page.waitForTimeout(300);
+    }
+  }
+
+  // --- CB Records "Detail Parameters" fields (live-confirmed 2026-09-03 via each field's own
+  // id/aria-label/placeholder - see SMOKE.spec.ts TMS-SMOKE-001). branch/recordCode/
+  // channelCode/centCode/errorId/rfCode are matched by id rather than accessible name: each
+  // is a distinct per-tab instance whose accessible name/placeholder wording differs slightly
+  // between CB Records and Quality Review (e.g. "Search Branch" vs "Search Branch..."), even
+  // though the same id is reused by both instances - only the current tab's own instance is
+  // ever actually present in the DOM at a time (live-confirmed; not two simultaneous nodes),
+  // so an id locator resolves to exactly one element regardless of which tab is active. ---
+  branchField(): Locator {
+    return this.page.locator('#branch');
+  }
+
+  transCodeField(): Locator {
+    return this.page.getByPlaceholder('e.g. 10 or 1*');
+  }
+
+  transModeField(): Locator {
+    return this.page.getByRole('combobox', { name: 'Select Mode' });
+  }
+
+  runNumberField(): Locator {
+    return this.page.getByPlaceholder('e.g. I1');
+  }
+
+  errorNumberField(): Locator {
+    return this.page.locator('#errorId');
+  }
+
+  statusCodeField(): Locator {
+    return this.page.getByRole('combobox', { name: 'Select Status' });
+  }
+
+  recordCodeField(): Locator {
+    return this.page.locator('#recordCode');
+  }
+
+  // Not getByPlaceholder('e.g. C') - "e.g. C" is a substring of contractNumber's own
+  // placeholder ("e.g. CN1001"), which getByPlaceholder matches by default (exact: false).
+  rocField(): Locator {
+    return this.page.locator('#roc');
+  }
+
+  regionField(): Locator {
+    return this.page.getByRole('combobox', { name: 'Select Region' });
+  }
+
+  districtField(): Locator {
+    return this.page.getByPlaceholder('e.g. 0123 or 01*');
+  }
+
+  staffField(): Locator {
+    return this.page.getByPlaceholder('e.g. 3');
+  }
+
+  agencyField(): Locator {
+    return this.page.getByPlaceholder('e.g. 001 or 0*');
+  }
+
+  contractNumberField(): Locator {
+    return this.page.getByPlaceholder('e.g. CN1001');
+  }
+
+  supplementalKindField(): Locator {
+    return this.page.getByRole('combobox', { name: 'Select Kind' });
+  }
+
+  actionCode3Field(): Locator {
+    return this.page.getByRole('combobox', { name: 'Select Action Code' });
+  }
+
+  adjustCodeField(): Locator {
+    return this.page.getByRole('combobox', { name: 'Select Adjust Code' });
+  }
+
+  centCodeField(): Locator {
+    return this.page.locator('#centCode');
+  }
+
+  channelCodeField(): Locator {
+    return this.page.locator('#channelCode');
+  }
+
+  // "Reference Code" - id=rfCode. CB Records' own placeholder reads "e.g. R"; Quality
+  // Review's copy of this same field carries a different placeholder ("Enter RF Code...").
+  referenceCodeField(): Locator {
+    return this.page.locator('#rfCode');
+  }
+
+  // --- Quality Review-only fields ---
+  programRunNumberField(): Locator {
+    return this.page.getByPlaceholder('e.g. CV');
+  }
+
+  // "Selection Frequency (nth record)" - a range slider (id=nthRecord), not a text field.
+  nthRecordSlider(): Locator {
+    return this.page.locator('#nthRecord');
+  }
+
+  // --- Non-CB Records-only field ---
+  // Distinct id (recordFamily) from CB Records/Quality Review's own "Record Code" combobox
+  // (id=recordCode) above - live-confirmed default value "All Case Types".
+  nonCbRecordFamilyField(): Locator {
+    return this.page.locator('#recordFamily');
+  }
+
+  searchButton(): Locator {
+    return this.page.getByRole('button', { name: /^Search$/i });
+  }
+
+  // --- Result Grid controls (live-confirmed 2026-09-03 - see SMOKE.spec.ts TMS-SMOKE-004) ---
+  filterResultsButton(): Locator {
+    return this.page.getByRole('button', { name: /^Filter Results$/i });
+  }
+
+  // Distinct from the search screen's own "View Records" button (ErrorManagerPage.viewRecords())
+  // - this "View" button is the Result Grid's own row-selection action.
+  resultGridViewButton(): Locator {
+    return this.page.getByRole('button', { name: /^View$/i });
+  }
+
+  selectAllOnPageCheckbox(): Locator {
+    return this.page.getByRole('checkbox', { name: /Select all/i });
+  }
+
+  // Live-confirmed: an unlabeled combobox (no aria-label/placeholder of its own beyond
+  // "Select...") whose value reads "25 / page" - the page-size selector. hasText does not
+  // match an <input>'s own value attribute, so this is matched by that attribute directly.
+  pageSizeSelector(): Locator {
+    return this.page.locator('input[role="combobox"][value$="/ page"]');
+  }
+
+  resultGridColumnHeader(name: string): Locator {
+    return this.page.getByRole('columnheader', { name, exact: true });
+  }
+
+  /**
+   * Live-searches CB Records (All Weeks, no policy filter) and returns the first currently
+   * HELD record's policy number/error ID, or null if none are available. HELD is this app's
+   * normal "awaiting correction, safely re-editable" status - OPEN/NEW records represent
+   * other workflow stages this suite has no evidence are safe to open/edit here, and a
+   * released/deleted/transferred record either won't appear in this default search or can't
+   * be edited at all.
+   *
+   * Used by tests that must not depend on one specific hardcoded record (which may already
+   * be mutated, held, or otherwise unavailable because of another test) - callers pass
+   * `exclude` to steer away from records other tests are known to be using (e.g. the
+   * suite-wide shared fixture in test-data/constants.ts), so this doesn't just rediscover
+   * the same contended record every time.
+   */
+  async findEligibleHeldRecord(exclude: string[] = []): Promise<{ policyNumber: string; errorId: string } | null> {
+    await this.goto();
+    await this.selectSearchTab('CB Records');
+    await this.allWeeksRadio().check();
+    await this.viewRecords();
+    await expect(this.resultGrid()).toBeVisible();
+    // Live-confirmed column layout for this grid: Select, Status, Error ID, ECN, Branch,
+    // RHO/District, Policy Number, (blank), Trans Code, Trans Mode, Cycle Week, Policy Kind,
+    // Date, Created By.
+    const COLUMNS = 14;
+    // This shared dev environment (a cold-starting Elastic Beanstalk instance, see
+    // playwright.config.ts) can render the Result Grid's heading before its rows have
+    // populated - a single immediate read can misread "not loaded yet" as "no eligible
+    // record exists". Retrying a few times distinguishes a genuine empty/all-excluded
+    // result from that transient render lag before concluding no data is available.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const cellTexts = await this.page.getByRole('cell').allInnerTexts();
+      for (let i = 0; i + COLUMNS <= cellTexts.length; i += COLUMNS) {
+        const row = cellTexts.slice(i, i + COLUMNS);
+        const [, status, errorId, , , , policyNumber] = row;
+        if (status === 'HELD' && policyNumber && !exclude.includes(policyNumber)) {
+          return { policyNumber, errorId };
+        }
+      }
+      await this.page.waitForTimeout(1000);
+    }
+    return null;
   }
 }

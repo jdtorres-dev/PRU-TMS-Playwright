@@ -127,6 +127,52 @@ async function attemptTransferAction(page: Page, recordEditorPage: RecordEditorP
   await recordEditorPage.cancelDialog().catch(() => {});
 }
 
+// RESOLVED (2026-09-03): TMS-RDMS-ADD-041/075 (BR-568/BR-590, both aliasing the same
+// universal BR-366 "double-length record can only be transferred from the first half"
+// condition, code 7128) were previously NOT INDEPENDENTLY VERIFIED on the belief that no
+// double-length (recordLength >= 1525) record exists on this environment. A full CB Records
+// census (o-0001/ROLE_OPERATOR - broadest rhoScope, all 10 RHO codes - Export CSV of the
+// whole population, then GET /api/v1/spi/{ecn} per record outside the already-checked
+// CB1/CB3 groups) found one: policy 100000005 (ECN 20202627000005, recordCode AR1,
+// recordLength 1668, status OPEN). Its own backend obr.comments field literally reads
+// "Double-length record (1668 bytes) seeded for AR1/BB2 shared-table and double-length
+// transfer-restriction testing" - deliberately seeded test data that this suite's own prior
+// investigation (see RDMS-TRL.spec.ts's header) had not checked, since it isn't a CB1 or CB3
+// record and doesn't surface in the Result Grid's own columns.
+//
+// recordLength >= 1525 makes the record read-only for editing (a live banner confirms this:
+// "This is a long-format record (recordLength >= 1525) - editing is not yet supported in
+// this phase of the modernization"), so it cannot go through openAdditionalInfoEditable()'s
+// Edit step - Transfer is a header-level Actions-menu item that does not require Edit mode.
+// The shared VALID_USERNAME/VALID_PASSWORD fixture (admin/admin) carries ROLE_ADMIN/
+// ROLE_REFDATA_ADMIN, which RDMS-TRL.spec.ts already confirmed live receives a blanket
+// HTTP 403 on any Transfer submission regardless of target RHO - o-0001 (ROLE_OPERATOR,
+// rhoScope covering all 10 RHO codes) is used here instead, same as that file's own fix.
+const DOUBLE_LENGTH_OPERATOR_USERNAME = 'o-0001';
+const DOUBLE_LENGTH_OPERATOR_PASSWORD = 'operator';
+const DOUBLE_LENGTH_POLICY_NUMBER = '100000005';
+const DOUBLE_LENGTH_ERROR_ID = 'E105';
+
+async function openDoubleLengthRecordTransferDialog(
+  page: Page,
+  loginPage: LoginPage,
+  recordEditorPage: RecordEditorPage,
+): Promise<void> {
+  await loginPage.goto();
+  await loginPage.submitLogin(DOUBLE_LENGTH_OPERATOR_USERNAME, DOUBLE_LENGTH_OPERATOR_PASSWORD);
+  await page.waitForURL(/\/errors/);
+  await recordEditorPage.openRecord(DOUBLE_LENGTH_POLICY_NUMBER, DOUBLE_LENGTH_ERROR_ID);
+  await recordEditorPage.openRdmsTab('Additional Information');
+  await recordEditorPage.openActionsItem('Transfer');
+}
+
+async function submitTransferToRho(page: Page, rhoCode: string): Promise<void> {
+  const targetRhoField = page.locator('#action-target-rho');
+  await targetRhoField.click();
+  await page.getByRole('option', { name: new RegExp(`^${rhoCode}\\b`) }).click({ force: true });
+  await page.getByRole('button', { name: /^Transfer$/i }).click();
+}
+
 test.describe('RDMS-ADD - Additional Information tab', () => {
   test('TMS-RDMS-ADD-001 - BR-055: cost-share/support charges on the special charge branch carry a fixed Product Code', async ({ loginPage, recordEditorPage }) => {
     await openAdditionalInfoEditable(loginPage, recordEditorPage);
@@ -399,11 +445,15 @@ test.describe('RDMS-ADD - Additional Information tab', () => {
   });
 
   test('TMS-RDMS-ADD-041 - BR-568: transferring from the second half of a double-length record is refused with code 7128', async ({ page, loginPage, recordEditorPage }) => {
-    await openAdditionalInfoEditable(loginPage, recordEditorPage);
-    // NOT INDEPENDENTLY VERIFIED: requires a double-length record and
-    // knowledge of which half is loaded - not obtainable for the shared
-    // test record.
-    await attemptTransferAction(page, recordEditorPage);
+    await openDoubleLengthRecordTransferDialog(page, loginPage, recordEditorPage);
+    await expect(page.getByRole('dialog').or(page.getByRole('heading', { name: /Transfer/i })).first()).toBeVisible();
+    await submitTransferToRho(page, 'I');
+    await expect(page.getByText('ERROR - A DOUBLE LENGTH RECORD CAN ONLY BE TRANSFERRED FROM THE FIRST HALF OF THE RECORD', { exact: true })).toBeVisible();
+    await recordEditorPage.cancelDialog();
+    // RESOLVED (2026-09-03): see this file's header comment above
+    // openDoubleLengthRecordTransferDialog for how DOUBLE_LENGTH_POLICY_NUMBER
+    // (100000005/ECN 20202627000005, recordLength 1668) was found and confirmed. Submitting
+    // Transfer with Target RHO=I reproduces condition 7128 exactly as catalogued.
   });
 
   test('TMS-RDMS-ADD-042 - BR-569: transferring a replacement record whose copies exist in all RHOs is refused with code 7129', async ({ page, loginPage, recordEditorPage }) => {
@@ -610,9 +660,15 @@ test.describe('RDMS-ADD - Additional Information tab', () => {
   });
 
   test('TMS-RDMS-ADD-075 - BR-590: transferring from the second half of a double-length record (DA01016) is refused with code 7128', async ({ page, loginPage, recordEditorPage }) => {
-    await openAdditionalInfoEditable(loginPage, recordEditorPage);
-    // NOT INDEPENDENTLY VERIFIED: same as TMS-RDMS-ADD-041.
-    await attemptTransferAction(page, recordEditorPage);
+    await openDoubleLengthRecordTransferDialog(page, loginPage, recordEditorPage);
+    await expect(page.getByRole('dialog').or(page.getByRole('heading', { name: /Transfer/i })).first()).toBeVisible();
+    await submitTransferToRho(page, 'I');
+    await expect(page.getByText('ERROR - A DOUBLE LENGTH RECORD CAN ONLY BE TRANSFERRED FROM THE FIRST HALF OF THE RECORD', { exact: true })).toBeVisible();
+    await recordEditorPage.cancelDialog();
+    // RESOLVED (2026-09-03): same fixture and finding as TMS-RDMS-ADD-041 above - BR-568 and
+    // BR-590 both alias the same universal BR-366 condition (DA01015 and DA01016 are two
+    // legacy screens both replaced by this one modernized Additional Information tab), so the
+    // same live confirmation applies to both.
   });
 
   test('TMS-RDMS-ADD-076 - BR-591: transferring a replacement record whose copies exist in all RHOs (DA01016) is refused with code 7129', async ({ page, loginPage, recordEditorPage }) => {
