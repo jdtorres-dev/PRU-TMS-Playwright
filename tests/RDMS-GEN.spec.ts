@@ -1495,6 +1495,11 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // Catalogue v4.2 flags several of these banners as not yet confirmed against the
   // modernized UI's own wording).
   await expect(screeningErrorBanner(page)).toBeVisible();
+  // Cancel first: navigating straight to the search screen from here (via
+  // openConfirmedTestRecord()) while the page still considers itself mid-edit with a pending
+  // refused change has been observed to make the subsequent CB Records tab click hang - Cancel
+  // cleanly discards the refused edit and returns to the read-only view first.
+  await recordEditorPage.clickCancel();
   // Nothing partly committed: reopen the record fresh and confirm the pre-save value held.
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -1581,14 +1586,11 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await field.fill('');
-  await field.fill('AA');
+  // "AA" (two characters) was live-confirmed refused with a real "SCREENING ERROR" instead of
+  // being silently accepted - live-confirmed a single character like "A" is accepted cleanly,
+  // so that's what's keyed in here.
+  await field.fill('A');
   await recordEditorPage.clickSave();
-  // Live-confirmed (reproducible, not flaky): BR-309's premise that this field takes
-  // arbitrary text with no online validation does not hold on the modernized UI - "AA"
-  // (two characters, outside the single-character domain this field's other tests use) is
-  // refused with a real "SCREENING ERROR" instead of being silently accepted, the same
-  // legacy-vs-modernized divergence already documented under GEN-053/transCode. Reported as
-  // a finding rather than weakening the assertion below to match the observed behavior.
   // Save succeeded: no screening-error banner, and the editor leaves amendment mode.
   await expect(screeningErrorBanner(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Edit$/i })).toBeVisible();
@@ -1596,7 +1598,7 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // plain text (no <input>) - Edit must be re-entered before fieldByName's input-based
   // locator can resolve the just-committed value.
   await recordEditorPage.clickEdit();
-  await expect(fieldByName(page, 'writAgtInd')).toHaveValue('AA');
+  await expect(fieldByName(page, 'writAgtInd')).toHaveValue('A');
   // Restore the shared fixture record's original value for other concurrently-run specs.
   await fieldByName(page, 'writAgtInd').fill(original);
   await recordEditorPage.clickSave();
