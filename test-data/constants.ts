@@ -92,44 +92,15 @@ export const QUATERNARY_TEST_POLICY_NUMBER = process.env.PRU_QUATERNARY_TEST_POL
 export const QUINARY_TEST_POLICY_NUMBER = process.env.PRU_QUINARY_TEST_POLICY_NUMBER ?? '300000165';
 export const SENARY_TEST_POLICY_NUMBER = process.env.PRU_SENARY_TEST_POLICY_NUMBER ?? '300000042';
 
-// Dedicated fixture for TMS-E2E-020 (2026-09-04), replacing that test's original dynamic
-// "search Status=New, pick the first row that isn't TEST_POLICY_NUMBER" approach - that
-// picked whichever New record happened to sort first, which could be one already mutated by
-// a prior run (defeating the case's own "not previously modified" precondition) and doubled
-// exposure to this environment's own navigation flakiness via an extra search round trip.
-//
-// IMPORTANT: this fixture is single-use per successful test run. TMS-E2E-020's own save
-// genuinely advances the record from New to Open (live-confirmed - the first choice for this
-// constant, 300000185, did exactly this and is now permanently Open), and no-op saves do NOT
-// trigger that transition (confirmed separately), so only a real amend-and-save consumes it.
-// A rerun against an already-Open record will correctly fail the test's own "still New"
-// precondition check - that is expected, not a regression, and requires picking a fresh New
-// record here again (there is no way to reset one back to New from the UI).
-// Switched from 300000185 (2026-09-04, consumed as above) to 300000095 (ECN RV202636900095,
-// Error ID 9115) - also consumed the same way by a second successful run, further confirming
-// the underlying New-status defect is genuinely resolved rather than a one-off. Switched again
-// to 300000005 (ECN RV202636900005, Error ID 0035) - also consumed by a third successful run,
-// which fully confirmed the amend+save+transition mechanism works end to end; the only
-// remaining gap that run exposed was TMS-E2E-020's own final assertion checking case-sensitive
-// 'OPEN' when the grid actually renders this status as "Open" (mixed case) - fixed with
-// case-insensitive regexes. Switched again to 300000290 (ECN RD202636900290, Error ID 9086) -
-// consumed by a fourth successful run (2026-09-08, full 35-test suite run), further confirming
-// the mechanism. Switched to 300000245 (ECN RD202636900245, Error ID 4010) - consumed by a
-// fifth successful run (2026-09-08); the run's own final assertion (waiting for the Edit
-// button to reappear) hit a slow/transient environment moment and reported a false failure,
-// but the underlying save+transition itself is confirmed to have genuinely committed (the
-// immediate retry correctly failed its own "still New" precondition check against the same
-// now-Open record). Switched to 300000220 (ECN J7202636900220, branch 5) - live-confirmed
-// (2026-09-08) this and its predecessor (J7202636900265, also branch 5, independently found
-// broken while fixing TMS-E2E-012) share a real, unrelated pre-existing data issue specific to
-// Debit Insurance branches (4, 5): "AGREE NUMBER Must be 6 numeric digits for Debit Insurance
-// branches (4, 5)" is violated by this environment's own seeded Agree Number values for those
-// branches (e.g. "AG0220" - alphanumeric, not 6 digits), which blocks ANY save on the record
-// regardless of what field this case edits - reproducible on a completely fresh record, so this
-// is a systemic seed-data characteristic of branch 4/5 records here, not this fixture's own
-// fault. Switched again to this replacement (branch N, not 4 or 5), live-confirmed New and
-// un-mutated: ECN RD202636900200, Error ID 0018.
-export const NEW_STATUS_TEST_POLICY_NUMBER = process.env.PRU_NEW_STATUS_TEST_POLICY_NUMBER ?? '300000200';
+// TMS-E2E-020 previously depended on a dedicated single-use fixture constant here
+// (NEW_STATUS_TEST_POLICY_NUMBER) that had to be swapped by hand every time a run consumed it
+// (seven times across 2026-09-04 through 2026-09-09 - 300000185, 300000095, 300000005,
+// 300000290, 300000245, 300000220, 300000200/300000155). That test is now fully dynamic
+// (2026-09-09): it searches CB Records with Status=New and tries live candidates itself each
+// run (excluding TEST_POLICY_NUMBER and branch 4/5 - this environment's seeded Agree Number
+// values for Debit Insurance branches 4/5 routinely violate "must be 6 numeric digits", which
+// blocks ANY save regardless of what field is edited), so no fixture constant is needed here
+// any more.
 
 // Dedicated fixture (2026-09-02) for the RDMS Trailer Information tab's PRUPAC variant
 // (prupacTrailer.* fields - Address/Rejection Information, the Agent Allocation Grid and its

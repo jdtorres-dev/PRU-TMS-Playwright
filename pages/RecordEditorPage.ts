@@ -47,24 +47,20 @@ export class RecordEditorPage extends BasePage {
   }
 
   async clickCancel(): Promise<void> {
-    // Live-confirmed: right after a Save that surfaces a banner (a
-    // pre-existing screening error, or 7114 NO_CORRECTIONS_MADE), the
-    // header Cancel button can stay disabled/be torn down and re-attached
-    // for the app's whole post-save transition - long enough that even a
-    // single click()'s own built-in actionability retry (bounded by
-    // actionTimeout) can run out before the button ever settles. Retrying
-    // the click itself (each attempt getting its own fresh actionability
-    // window) survives that longer transition instead of failing loudly
-    // the first time the window is too short.
-    const cancelButton = this.page.getByRole('button', { name: /^Cancel$/i });
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await cancelButton.click({ timeout: 15_000 });
-        break;
-      } catch (err) {
-        if (attempt >= 2) throw err;
-      }
-    }
+    // Live-confirmed (2026-09-09, via a Playwright UI trace on
+    // TMS-BOUND-013): right after a Save that surfaces a banner (a
+    // pre-existing screening error, or 7114 NO_CORRECTIONS_MADE), a
+    // "Changes saved" toast from an immediately preceding save can still be
+    // on screen, stacked with the new banner, sitting over the header
+    // Cancel button - and unlike a single transient toast, this stacked
+    // pair does not reliably clear within any bounded window. A previous
+    // fix here retried the click itself (three attempts, 15s each) and
+    // still failed identically every time, because retrying a blocked
+    // click doesn't help when the blocker never actually goes away - the
+    // exact same root cause clickEdit()'s own `force` option already
+    // exists for, and the same fix applies: bypass the "is anything else on
+    // top" actionability check rather than wait it out.
+    await this.page.getByRole('button', { name: /^Cancel$/i }).click({ force: true });
     // Cancelling with pending field edits opens a "Discard changes?"
     // confirmation on top of the editor - click through it so the record
     // actually leaves Edit mode instead of leaving that modal stuck open

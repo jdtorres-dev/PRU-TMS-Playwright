@@ -106,7 +106,13 @@ test.describe('SMOKE - Screen load / cross-screen navigation', () => {
   test('TMS-SMOKE-004 - Result Grid loads and presents its documented contents', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
     const allWeeks = errorManagerPage.allWeeksRadio();
-    if (await allWeeks.count()) await allWeeks.check();
+    // Wait for the radio to actually render before interacting with it - a bare .count()
+    // right after login is a snapshot, not a wait, and can race the Error Manager screen's
+    // own initial render on this shared, sometimes cold-starting dev environment (see
+    // playwright.config.ts's own retries comment), silently skipping the check if the radio
+    // hasn't mounted yet.
+    await expect(allWeeks).toBeVisible();
+    await allWeeks.check();
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
     // Live-confirmed (2026-09-03): the population being viewed and the total selected,
