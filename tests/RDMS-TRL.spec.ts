@@ -120,6 +120,24 @@ import type { RecordEditorPage } from '../pages/RecordEditorPage';
  * admin-login helper was removed. TRL-028/029/030's own already-o-0001-based resolutions
  * (2026-09-03, see openOwnRecordTransferDialogAsOperator/openDeletedRecordTransferDialogAsOperator
  * below) were independently re-run and confirmed still passing.
+ *
+ * RETRACTED DEFECT (DEF-RDMS-TRL-002, 2026-09-09): TRL-026 previously filed the live app's
+ * HTTP 400 errorCd 7110 ("ERROR- RHO CODE INVALID FOR TRANSFER") response - returned when
+ * Target RHO was set to Q or R on the shared TEST_POLICY_NUMBER fixture - as a defect, on the
+ * assumption BR-503/condition 7126 should have fired instead. Per developer clarification:
+ * RHO codes Q and R are "Sentinel" values and are never valid transfer *targets* - 7110/
+ * TARGET_RHO_INVALID_FOR_TRANSFER is the correct, intended response for that scenario, not a
+ * defect. Condition 7126/BR-503 instead fires when the record being transferred FROM (its own
+ * current/*source* RHO) is already Q or R, regardless of the target chosen - a different
+ * scenario than TRL-026 was exercising. Live-confirmed with a real record whose own
+ * identity.rho is "Q" (SOURCE_RHO_Q_POLICY_NUMBER, 300000279/ECN I1202636900279 - found via
+ * the same CB Records grid scan TRL-029/030 used, keying off the `location` column's
+ * "RHO<code>/DIST..." encoding): submitting Transfer with a normal, different target (RHO=B)
+ * from that record returns HTTP 400, errorCd 7126, rule SOURCE_RHO_INVALID_FOR_TRANSFER,
+ * message "ERROR-AN RHO CODE OF Q OR R IS INVALID FOR TRANSFER" - matching BR-503 and the
+ * catalogue's Error Codes sheet row 197 verbatim. The application was correct all along;
+ * DEF-RDMS-TRL-002 is retracted, and TRL-026 now exercises the source-RHO scenario BR-503
+ * actually describes.
  */
 
 // Trailer Comparison grid (TRLR-1..6, slot 0-5): RHO is a combobox with no name attribute of
@@ -248,6 +266,14 @@ const PB_REPL_POLICY_NUMBER = '200000018'; // ECN I1202630001018
 const PB_REPL_ERROR_ID = '0222';
 const SYNOPSIS_POLICY_NUMBER = '100000004'; // ECN DC202626000004, branch 1 (a BR-507 synopsis branch), status HELD
 const SYNOPSIS_ERROR_ID = 'E104';
+// Dev clarification (2026-09-09): RHO codes Q and R are "Sentinel" values and are never valid
+// transfer targets (errorCd 7110, condition-code TARGET_RHO_INVALID_FOR_TRANSFER - see
+// TRL-026's own history below) - condition 7126/BR-503 instead fires when the record being
+// transferred FROM (its own current/source RHO) is already Q or R, regardless of the chosen
+// target. Found via the same CB Records grid scan TRL-029/030 used (`location` column encodes
+// "RHO<code>/DIST..."): a real, currently HELD record whose own identity.rho is "Q".
+const SOURCE_RHO_Q_POLICY_NUMBER = '300000279'; // ECN I1202636900279, recordCode 998, identity.rho=Q, status HELD
+const SOURCE_RHO_Q_ERROR_ID = '7019';
 
 async function openOwnRecordTransferDialogAsOperator(
   page: Page,
@@ -707,28 +733,25 @@ test.describe('RDMS-TRL - Trailer Information (Error Record Editor)', () => {
     // cancelled rather than committed.
   });
 
-  test('TMS-RDMS-TRL-026 [Application Defect - DEF-RDMS-TRL-002] - BR-503: transferring with an RHO code of Q or R is refused under condition 7126', async ({ page, loginPage, recordEditorPage }) => {
-    await openTrailerTransferDialogAsOperator(page, loginPage, recordEditorPage);
+  test('TMS-RDMS-TRL-026 - BR-503: transferring with an RHO code of Q or R is refused under condition 7126', async ({ page, loginPage, recordEditorPage }) => {
+    await openOwnRecordTransferDialogAsOperator(page, loginPage, recordEditorPage, SOURCE_RHO_Q_POLICY_NUMBER, SOURCE_RHO_Q_ERROR_ID);
     await expect(page.getByText(/Transfer/i).first()).toBeVisible();
     const targetRhoField = page.locator('#action-target-rho');
-    await selectReadonlyComboboxOption(page, targetRhoField, 'Q');
+    // A normal, different, non-Q/R target - BR-503's own scenario is the SOURCE record's RHO
+    // being Q/R, not the target, so any ordinary target exercises it (see RETRACTED DEFECT,
+    // DEF-RDMS-TRL-002, in this file's header for why Target RHO=Q/R is a different condition,
+    // 7110, and not this one).
+    await selectReadonlyComboboxOption(page, targetRhoField, 'B');
     await page.getByRole('button', { name: /^Transfer$/i }).click();
-    // DEF-RDMS-TRL-002: this is the correct, catalogued expected behavior for BR-503 (Error
-    // Codes sheet row 197: condition 7126, "ERROR-AN RHO CODE OF Q OR R IS INVALID FOR
-    // TRANSFER", explicitly mapped to BR-364/434/481/503/526/566/588) and is left in place
-    // deliberately rather than weakened to match the live application. Reconnaissance
-    // (2026-09-02, "demo" environment, o-0001/ROLE_OPERATOR - see openTrailerTransferDialogAsOperator
-    // above) confirmed the live app instead returns HTTP 400
-    // {"error":"ERROR- RHO CODE INVALID FOR TRANSFER","rule":"TARGET_RHO_INVALID_FOR_TRANSFER",
-    // "errorCd":"7110"} - a different, real, catalogued condition (Error Codes sheet row 184)
-    // that carries no Business Rule mapping of its own. The refusal itself is correct (nothing
-    // commits; Target RHO=Q is rejected) but under the wrong condition code and a materially
-    // different message than BR-503/the catalogue document, which would break any downstream
-    // consumer keyed on 7126 specifically. Reproduced identically for both Q and R targets,
-    // and with an in-scope target (R is in o-0001's own rhoScope, ruling out a
-    // target-not-in-my-scope explanation for the mismatch).
     await expect(page.getByText('ERROR-AN RHO CODE OF Q OR R IS INVALID FOR TRANSFER', { exact: true })).toBeVisible();
     await recordEditorPage.cancelDialog();
+    // RESOLVED (2026-09-09, corrected after dev clarification and DEF-RDMS-TRL-002's
+    // retraction - see this file's header): SOURCE_RHO_Q_POLICY_NUMBER (300000279/ECN
+    // I1202636900279) is a real, currently HELD record whose own identity.rho is "Q".
+    // Submitting Transfer from it with an ordinary target (RHO=B) reproduces condition 7126
+    // exactly as catalogued: HTTP 400, errorCd 7126, rule SOURCE_RHO_INVALID_FOR_TRANSFER,
+    // matching BR-503 and the Business Rules Catalogue's Error Codes sheet row 197 verbatim.
+    // Nothing commits; the dialog is cancelled after the banner is confirmed.
   });
 
   test('TMS-RDMS-TRL-027 - BR-504: attempting a same-RHO transfer is refused under condition 7127', async ({ page, loginPage, recordEditorPage }) => {
@@ -748,8 +771,8 @@ test.describe('RDMS-TRL - Trailer Information (Error Record Editor)', () => {
     // RHO). Submitting Transfer with Target RHO=B (the record's own current RHO) reproduces
     // condition 7127 exactly as catalogued: HTTP 400, errorCd 7127, rule
     // TARGET_RHO_SAME_AS_SOURCE, matching BR-504 and the Business Rules Catalogue's Error
-    // Codes sheet row 198 verbatim (unlike TRL-026/DEF-RDMS-TRL-002, no code/message mismatch
-    // here). Nothing commits; the dialog is cancelled after the banner is confirmed.
+    // Codes sheet row 198 verbatim. Nothing commits; the dialog is cancelled after the banner
+    // is confirmed.
   });
 
   test('TMS-RDMS-TRL-028 - BR-505: a replacement record whose copies exist in all RHOs is refused for transfer under condition 7129', async ({ page, loginPage, errorManagerPage, recordEditorPage }) => {
