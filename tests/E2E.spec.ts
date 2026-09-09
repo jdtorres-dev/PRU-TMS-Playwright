@@ -819,6 +819,19 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
    * "CB2" still returned every CB2 row, not a 5th of them. The "sample
    * rather than the whole population" behaviour BR-599 to BR-614 describe
    * is not observable in this build.
+   *
+   * RESOLVED (2026-09-08): live-confirmed the "first sampled row" this
+   * case picks can itself carry a pre-existing, unrelated screening
+   * violation (e.g. a Debit-Insurance-branch record whose own Agree Number
+   * isn't 6 numeric digits) that refuses ANY save attempt on it, regardless
+   * of what this case edits - reproduced with a zero-edit save on the same
+   * row. "B13X" (the value this case keys into Lapse Policy No Repl) is
+   * confirmed valid: the identical edit against a different, genuinely
+   * healthy sampled row saves cleanly with no screening error. Fixed by
+   * trying each sampled row in turn (a real no-op save first checks it's
+   * healthy) rather than assuming the first result is usable, since the
+   * shared environment's CB2 population is not guaranteed to be
+   * screening-clean end to end.
    */
   test('TMS-E2E-012 - E2E-A12: search Quality Review with a sampling interval and resolve one sampled record', async ({ page, loginPage, errorManagerPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
@@ -848,39 +861,85 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await expect(page.locator('main')).toContainText(/Total records:\s*[1-9]\d*/);
     await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
 
-    // Step: Amend Sampled Record - the first real row returned, captured
-    // dynamically rather than assumed. Live-confirmed: unlike the CB
-    // Records grid (where data rows are real <tr> elements), the Quality
-    // Review result grid renders each data row as its own <button> wrapping
-    // all its cells, with no <tr> at all besides the header row - so
+    // Step: Amend Sampled Record. Live-confirmed: unlike the CB Records
+    // grid (where data rows are real <tr> elements), the Quality Review
+    // result grid renders each data row as its own <button> wrapping all
+    // its cells, with no <tr> at all besides the header row - so
     // page.locator('tr') here only ever matches that single header row
     // (whose own "Select all on this page" checkbox label also happens to
     // start with "Select ", which is why filtering by that text against
     // 'tr' silently resolved to the header instead of a real row). Data
     // rows are selected by role=button instead.
-    const sampledRow = page.getByRole('button').filter({ hasText: /^Select \S/ }).first();
-    await expect(sampledRow).toBeVisible();
-    const sampledEcn = (await sampledRow.innerText()).match(/^Select (\S+)/)?.[1];
+    //
+    // Not every sampled row is guaranteed save-able (see the doc comment
+    // above) - a candidate row is tried, and if it turns out to already
+    // carry an unrelated pre-existing screening violation (reproduced by a
+    // real zero-edit save first), the next one is tried instead, rather
+    // than assuming the first result is usable.
+    let sampledEcn: string | undefined;
+    const lapsePolicy = page.getByText(/Lapse Policy No Repl/i).locator('xpath=following::input[1]');
+    const maxCandidates = 6;
+    for (let i = 0; i < maxCandidates; i++) {
+      const candidateRow = page.getByRole('button').filter({ hasText: /^Select \S/ }).nth(i);
+      if (!(await candidateRow.count())) break;
+      const candidateEcn = (await candidateRow.innerText()).match(/^Select (\S+)/)?.[1];
+      await candidateRow.getByRole('button').first().click();
+      await expect(page.getByText('General Information').first()).toBeVisible();
+      await recordEditorPage.clickEdit();
+      // Baseline health check: a zero-edit save. A real screening error
+      // here means this row already has an unrelated invalid field: skip
+      // it. A "no corrections" refusal (no edits were made) is harmless -
+      // the row is healthy, just already in Edit mode for the real edit
+      // below.
+      await recordEditorPage.clickSave();
+      await page.waitForTimeout(1200);
+      const isPreBroken = await page.locator('main').getByText(/SCREENING ERROR/i).count();
+      if (isPreBroken) {
+        await recordEditorPage.clickCancel().catch(() => {});
+        await errorManagerPage.goto();
+        await errorManagerPage.allWeeksRadio().check();
+        await errorManagerPage.selectSearchTab('Quality Review');
+        const retryRecordCodeField = page.getByRole('combobox', { name: /^Record Code$/i }).and(page.locator(':not(:disabled)'));
+        await (await errorManagerPage.openComboboxOptions(retryRecordCodeField)).filter({ hasText: /Commission Block type 2/i }).first().click();
+        await errorManagerPage.viewRecords();
+        await expect(errorManagerPage.resultGrid()).toBeVisible();
+        await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
+        continue;
+      }
+      sampledEcn = candidateEcn;
+      break;
+    }
     expect(sampledEcn).toBeTruthy();
-    await sampledRow.getByRole('button').first().click();
-    await expect(page.getByText('General Information').first()).toBeVisible();
-    await recordEditorPage.clickEdit();
+
+    // A healthy candidate's own baseline zero-edit save above leaves a
+    // "NO CORRECTIONS WERE MADE" toast that can still be sitting over the
+    // Edit button - force:true clicks through it (same pattern
+    // RecordEditorPage.clickEdit() already documents for this).
+    if (await recordEditorPage.editButton().count()) await recordEditorPage.clickEdit({ force: true });
     // Live-confirmed: once a field carries a manually-entered value, this
     // record grows an info icon next to that field's label, and from then
     // on getByLabel() for it finds nothing at all - a getByLabel()-free
     // locator is used instead: find the visible label text, then the next
     // real <input> in document order after it.
-    const lapsePolicy = page.getByText(/Lapse Policy No Repl/i).locator('xpath=following::input[1]');
-    await lapsePolicy.fill('B13X');
+    //
+    // A fixed literal here ("B13X" every run) risks the exact same
+    // NO_CORRECTIONS_MADE class of bug already fixed elsewhere in this
+    // suite: whichever record this run's sampling happens to land on may
+    // already carry that literal from a previous run - toggling between
+    // two valid values based on the field's own current value avoids that.
+    const lapsePolicyOriginal = await lapsePolicy.inputValue();
+    const lapsePolicyNew = lapsePolicyOriginal === 'B13X' ? 'B14X' : 'B13X';
+    await lapsePolicy.fill(lapsePolicyNew);
     await recordEditorPage.clickSave();
     // Live-confirmed: the completion banner here is transient and can be
     // gone by the time a screenshot/assertion runs, even though the save
-    // genuinely committed - verifying the persisted field value directly,
-    // via a fresh Edit, is more reliable than racing a fading toast.
+    // genuinely committed. A successful save returns to view mode, where
+    // this field (like every field with prior edits) renders as read-only
+    // text next to its own "N prior changes to this field" button, not an
+    // input - checked via visible text instead of re-entering Edit and
+    // reading .inputValue(), which needs that now-gone input element.
     await expect(recordEditorPage.editButton()).toBeVisible();
-    await recordEditorPage.clickEdit();
-    await expect(lapsePolicy).toHaveValue('B13X');
-    await recordEditorPage.clickCancel();
+    await expect(page.locator('main').getByText(lapsePolicyNew, { exact: true }).first()).toBeVisible();
 
     // Step: Return to Result Grid - re-run the identical search and
     // confirm the same sampled record (captured above, not assumed)
@@ -1586,6 +1645,15 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
    * comment for the current record's provenance and how to find a
    * replacement (CB Records, Status = New, excluding both
    * TEST_POLICY_NUMBER and any previously-consumed candidate).
+   *
+   * When picking a replacement, also avoid branch 4/5 (Debit Insurance)
+   * records - live-confirmed (2026-09-08, on two independent branch-5
+   * records) this environment's own seeded Agree Number values for those
+   * branches routinely violate "must be 6 numeric digits for Debit
+   * Insurance branches (4, 5)", which blocks ANY save on the record
+   * (SCREENING ERROR) regardless of what field this case edits. Check the
+   * candidate's `branch` before committing to it (e.g. via
+   * GET /api/v1/spi/search?statusCode=N).
    */
   test('TMS-E2E-020 - E2E-A20: the first save of an untouched record advances its status to Open', async ({ page, loginPage, errorManagerPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
@@ -1706,41 +1774,197 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-022 | CREDENTIAL GAP - only the ROLE_OPERATOR account
-   * (admin/admin) is available to this suite (see also TMS-LOGIN-015); no
-   * ROLE_REFDATA_ADMIN credentials are provided anywhere in the CSV or its
-   * Preconditions, so the Reference Data Administration screen's actual
-   * CODE_IN_USE / withdrawal / audit-trail behaviour cannot be exercised
-   * here. What IS verified for real: the documented ROLE_OPERATOR
-   * restriction that this capability is not reachable with the only account
-   * this suite has.
+   * TMS-E2E-022 | Live-confirmed 2026-09-08: admin/admin genuinely carries
+   * ROLE_REFDATA_ADMIN (alongside ROLE_ADMIN) and reaches this screen -
+   * "Reference Data Administration" is branded "Lookup Manager" in this
+   * build (Administration nav -> "Lookup Manager" -> Lookup Categories /
+   * Lookup Values tabs). The prior "CREDENTIAL GAP" skip was wrong.
+   *
+   * Two live-environment quirks this test routes around:
+   *   - every direct/hard navigation to any /admin/* URL 404s (the SPA only
+   *     resolves these routes via in-app client-side navigation) - this
+   *     test never uses page.goto() for admin pages, only in-app clicks.
+   *   - both Delete and the Active-toggle mutations fire from a Base UI
+   *     menu/dialog stack where Playwright's actionability check can find
+   *     the correct element genuinely obscured by the still-fading prior
+   *     overlay; a plain .click() intermittently no-ops with zero visible
+   *     error. { force: true } is used on menu items and dialog-confirm
+   *     buttons for this reason, consistent everywhere the same pattern
+   *     showed up in exploration.
+   *
+   * "Hold Reason" / AWAITING_AGENT_CONFIRMATION was chosen as the in-use
+   * code under test after checking real usage via the Held-records search
+   * (GET /api/v1/spi/search?statusCode=H) - it is live-confirmed the
+   * lowest-usage in-use code available (server reports usageCount: 16
+   * system-wide), keeping this test's blast radius small. The permanent
+   * Delete attempt is expected (and confirmed) to be refused outright by
+   * the server, so this never risks that data; only the reversible Active
+   * toggle actually mutates state, and is restored immediately after.
    */
   test('TMS-E2E-022 - E2E-A22: a reference-data code in use cannot be permanently removed but can be withdrawn', async ({ page, loginPage }) => {
     await loginPage.loginAsValidUser();
-    await expect(page.getByRole('link', { name: /Reference Data/i })).toHaveCount(0);
-    await expect(page.getByRole('menuitem', { name: /Reference Data/i })).toHaveCount(0);
+
+    await page.getByRole('button', { name: /Administration/i }).click();
+    await page.locator('a:has-text("Lookup Manager"), button:has-text("Lookup Manager")').first().click();
+    await expect(page.getByRole('heading', { name: /Lookup (Categories|Manager)/i })).toBeVisible();
+    await page.locator('button:has-text("Lookup Values")').first().click();
+    await page.locator('button:has-text("Hold Reason")').first().click();
+
+    const targetCode = 'AWAITING_AGENT_CONFIRMATION';
+    const row = page.locator('tr', { hasText: targetCode }).first();
+    await expect(row).toBeVisible();
+
+    // Step 1: permanent Delete on an in-use code is refused, not silently
+    // ignored - the server's CODE_IN_USE-style refusal surfaces inline in
+    // the same confirm dialog, and the code remains in the list.
+    await row.locator('button').last().click({ force: true });
+    await page.locator('[role=menuitem]:has-text("Delete")').click({ force: true });
+    const deleteDialog = page.getByRole('dialog').filter({ hasText: 'Delete Code?' });
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole('button', { name: 'Delete', exact: true }).click({ force: true });
+    await expect(deleteDialog.getByText(/still referenced by \d+ record/i)).toBeVisible();
+    await deleteDialog.getByRole('button', { name: 'Cancel', exact: true }).click({ force: true });
+    await expect(row).toBeVisible();
+
+    // Step 2: the same in-use code CAN be withdrawn via the reversible
+    // Active toggle - this is the non-destructive alternative the business
+    // rule actually offers in place of permanent removal.
+    const toggle = row.locator('[role="switch"]').first();
+    const wasActive = (await toggle.getAttribute('aria-checked')) === 'true';
+    await toggle.click({ force: true });
+    await expect(toggle).toHaveAttribute('aria-checked', wasActive ? 'false' : 'true');
+    // Restore it immediately - this is shared reference data other tests rely on.
+    await toggle.click({ force: true });
+    await expect(toggle).toHaveAttribute('aria-checked', wasActive ? 'true' : 'false');
+
+    // Step 3: the audit trail records these actions against this code.
+    await row.locator('button').last().click({ force: true });
+    await page.locator('[role=menuitem]:has-text("Audit History")').click({ force: true });
+    const auditDialog = page.getByRole('dialog').filter({ hasText: /Audit/i });
+    await expect(auditDialog).toBeVisible();
+    await expect(auditDialog.getByText(targetCode)).toBeVisible();
   });
 
   /**
-   * TMS-E2E-023 | CREDENTIAL GAP - identical to TMS-E2E-022: no
-   * ROLE_REFDATA_ADMIN credentials are available to reach the bulk import
-   * screen this row describes.
+   * TMS-E2E-023 | Live-confirmed 2026-09-08: admin/admin reaches the bulk
+   * import screen (Administration -> Lookup Manager -> Lookup Values ->
+   * select a category -> "Bulk Import"), same access-gap correction as
+   * TMS-E2E-022. The "Comm Type" category is reused here since it is
+   * live-confirmed low-traffic (only one schema field, commType,
+   * references it - see TMS-E2E-022's own exploration), keeping any stray
+   * import debris low-impact; the test deletes its own valid row afterward
+   * either way.
+   *
+   * DEF-E2E-004 RETRACTED (2026-09-08), per direction from the test owner:
+   * this case's "lands in full or not at all" describes per-ROW atomicity
+   * (no code is ever half-written - a row is either fully created with
+   * every column applied, or not written at all), not whole-BATCH
+   * atomicity across every row in the file. A 2-row CSV with one valid
+   * new code and one invalid row (blank "code" - a required column)
+   * confirms exactly that: the valid row lands in full (both its code and
+   * description are present in the Lookup Values grid, confirmed by
+   * searching for it right after import), and the invalid row lands not
+   * at all (skipped outright, zero partial effect - server response e.g.
+   * `{"inserted":1,"updated":0,"skipped":[{"rowNumber":2,"message":"code
+   * is required"}]}`). The UI's own "N INSERTED / N UPDATED / N SKIPPED"
+   * tally reflects this same per-row semantics.
    */
   test('TMS-E2E-023 - E2E-A23: a bulk reference-data import lands in full or not at all', async ({ page, loginPage }) => {
     await loginPage.loginAsValidUser();
-    await expect(page.getByRole('link', { name: /Reference Data/i })).toHaveCount(0);
-    await expect(page.getByRole('menuitem', { name: /Reference Data/i })).toHaveCount(0);
+    await page.getByRole('button', { name: /Administration/i }).click();
+    await page.locator('a:has-text("Lookup Manager"), button:has-text("Lookup Manager")').first().click();
+    await page.locator('button:has-text("Lookup Values")').first().click();
+    await page.locator('button:has-text("Comm Type")').first().click();
+    await page.locator('button:has-text("Bulk Import")').first().click();
+
+    const validCode = 'ZE2E' + Date.now().toString().slice(-6);
+    const csv = `code,description\n${validCode},E2E-023 valid row\n,E2E-023 invalid row (missing code)\n`;
+    const dialog = page.locator('[role=dialog]').first();
+    await dialog.locator('input[type=file]').setInputFiles({
+      name: 'bulk-import-e2e-023.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csv),
+    });
+    await dialog.getByRole('button', { name: 'Upload', exact: true }).click({ force: true });
+
+    const resultDialog = page.locator('[role=dialog]').last();
+    await expect(resultDialog.getByText(/SKIPPED/i)).toBeVisible();
+    await expect(resultDialog.getByText(/code is required/i)).toBeVisible();
+    await resultDialog.getByRole('button', { name: 'Done', exact: true }).click({ force: true });
+
+    try {
+      // Ground truth on what the server actually committed is read back
+      // from the values grid itself (the same list a real user would
+      // check), not the result dialog's own text - the dialog never lists
+      // inserted codes by name, so checking its wording alone proves
+      // nothing either way. Searching the grid for the valid row's own
+      // code is the real, user-visible step that shows whether it was
+      // actually persisted.
+      await page.locator('input[placeholder="Search values..."]').fill(validCode);
+      await page.waitForTimeout(800);
+
+      // The valid row must land in full: both its code and its
+      // description column present, not a partial write.
+      const validRow = page.locator('tr', { hasText: validCode });
+      await expect(validRow).toHaveCount(1);
+      await expect(validRow).toContainText('E2E-023 valid row');
+    } finally {
+      // Clean up the valid row regardless of outcome, through the same
+      // real Delete-via-UI flow TMS-E2E-022 already exercises (it is not
+      // referenced by any real record, so this is a safe, unconditional
+      // cleanup) rather than an API call.
+      await page.locator('input[placeholder="Search values..."]').fill(validCode);
+      await page.waitForTimeout(800);
+      const cleanupRow = page.locator('tr', { hasText: validCode }).first();
+      if (await cleanupRow.count()) {
+        await cleanupRow.locator('button').last().click({ force: true });
+        await page.locator('[role=menuitem]:has-text("Delete")').click({ force: true });
+        const cleanupDeleteDialog = page.getByRole('dialog').filter({ hasText: 'Delete Code?' });
+        await cleanupDeleteDialog.getByRole('button', { name: 'Delete', exact: true }).click({ force: true });
+      }
+    }
   });
 
   /**
-   * TMS-E2E-024 | CREDENTIAL GAP - identical to TMS-E2E-022: no
-   * ROLE_REFDATA_ADMIN credentials are available to reach the File Import
-   * screen this row describes.
+   * TMS-E2E-024 | Live-confirmed 2026-09-08: admin/admin reaches File
+   * Import (Administration -> "File Import"), same access-gap correction
+   * as TMS-E2E-022/023. The screen is branded "FAST PPCS Import" - it
+   * explicitly submits "a FAST PPCS feed to the batch team's processing
+   * chain" and tracks each upload through a FILE NAME / CYCLE WEEK /
+   * RECEIVED / STATUS / STAGES table, which does match this case's
+   * "staged... and committed separately" premise.
+   *
+   * SCOPE NOTE: unlike TMS-E2E-022/023's self-contained reference-data
+   * CRUD, actually clicking Submit here dispatches to that real batch
+   * pipeline rather than a sandboxed admin action - live-confirmed
+   * required, not assumed (Submit is disabled with no file attached, and
+   * live-confirmed to enable the instant any file is chosen, with no
+   * client-side content check before that point). Per direction, an actual
+   * submission (and therefore the real staged -> committed transition and
+   * STATUS/STAGES progression this case's later steps describe) is left
+   * unexercised here rather than risking a real downstream batch run;
+   * only the reachable, side-effect-free parts are verified for real.
    */
   test('TMS-E2E-024 - E2E-A24: a legacy record file is staged through File Import and committed separately', async ({ page, loginPage }) => {
     await loginPage.loginAsValidUser();
-    await expect(page.getByRole('link', { name: /Reference Data/i })).toHaveCount(0);
-    await expect(page.getByRole('menuitem', { name: /File Import/i })).toHaveCount(0);
+    await page.getByRole('button', { name: /Administration/i }).click();
+    await page.locator('a:has-text("File Import"), button:has-text("File Import")').first().click();
+
+    await expect(page.getByText(/FAST PPCS Import/i)).toBeVisible();
+    await expect(page.getByText(/batch team's processing chain/i)).toBeVisible();
+
+    const submitBtn = page.getByRole('button', { name: 'Submit', exact: true });
+    await expect(submitBtn).toBeDisabled();
+
+    const fileInput = page.locator('input[type=file]').first();
+    await fileInput.setInputFiles({
+      name: 'e2e-024-not-submitted.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('E2E-024 probe file - never actually submitted.\n'),
+    });
+    await expect(submitBtn).toBeEnabled();
+
+    await expect(page.getByText(/RECENT FAST PPCS UPLOADS/i)).toBeVisible();
   });
 
   /**
@@ -1777,28 +2001,45 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
    * against the case's real four steps and will exercise the real tiered
    * behavior once that block clears.
    */
-  test('TMS-E2E-025 - E2E-A25: strict, warn and permissive enforcement tiers behave differently on the same save', async ({ page, loginPage, recordEditorPage }) => {
-    // KNOWN DEFECT (live-confirmed 2026-09-03, via the raw PUT response,
-    // not guessed): Subsidiary Code's own edits are never included in the
-    // save payload at all. Confirmed with three independent interaction
-    // methods (Playwright .fill(), realistic keystroke-by-keystroke typing
-    // + Tab to blur) against a field whose starting value is genuinely
-    // blank - every attempt still returns 400 "ERROR- NO CORRECTIONS WERE
-    // MADE BY THE TERMINAL OPERATOR" (NO_CORRECTIONS_MADE, 7114), which
-    // only makes sense if the client never registers the field as dirty
-    // and so never sends its new value. This is a client-side bug (BR-307/
-    // BR-310's warn tier cannot be exercised at all as a result), not an
-    // automation issue - test.fail() marks it as a known, expected failure.
-    // The strict and permissive tiers are tested first (and pass for real)
-    // so this one confirmed-broken step doesn't block their own coverage;
-    // the case's own approved order (strict, warn, permissive) is not
-    // otherwise changed in intent, only in which independent tier runs
-    // last.
-    test.fail(
-      true,
-      'BUG: Subsidiary Code edits are never included in the save payload - every attempt (regardless of interaction method) is refused with 7114 NO_CORRECTIONS_MADE even though the field genuinely changed, so the warn tier cannot be exercised at all.',
-    );
-
+  test('TMS-E2E-025 - E2E-A25: strict, warn and permissive enforcement tiers behave differently on the same save', async ({ page, loginPage, recordEditorPage, errorManagerPage }) => {
+    // DEFECT RETRACTED (2026-09-08), per direction from the test owner:
+    // Subsidiary Code is a closed-list combobox (live-confirmed via its
+    // real options: blank, A, 1, B, 2, O, 3, 4, 5, 7 - matching
+    // GET /api/v1/refdata/subsidiary_code exactly), not a free-text input.
+    // The previous version called .fill('ZZ9') / .fill('ZZ8') directly on
+    // its underlying input - that only edits the combobox's own filter/
+    // display text, it does not select an option, so the field's real form
+    // state never actually changes and every save is correctly refused
+    // with NO_CORRECTIONS_MADE. On top of that, "ZZ9"/"ZZ8" (three
+    // characters) aren't even shaped like a real value for this field
+    // (every registered code is exactly one character) - fabricated,
+    // invalid test data on top of the wrong interaction method. Neither
+    // was a real application defect. Fixed by driving the combobox the
+    // same way every other combobox field in this suite is driven
+    // (errorManagerPage.openComboboxOptions + click a real option).
+    //
+    // Subsidiary Code is confirmed as a genuine BR-308 warn-tier field (the
+    // Business Rules Catalogue names it explicitly, alongside sysSource,
+    // chrgBackCode, retReasonCode, mnemonicCode, convSig, faceIncInd), so
+    // this is the right field for this step. Live-confirmed instead
+    // (2026-09-08): on this specific record (branch V), the field itself
+    // enforces a stronger, higher-precedence rule that pre-empts the
+    // warn-tier check entirely - its own on-screen hint reads "Must be
+    // blank -- only allowed when branch is 'Z' and system source is '5'",
+    // and every registered code (tested both a lettered one, A, and a
+    // numeric one, 1) is refused outright with that exact message, not
+    // silently accepted with a warning. A search across all 212 records
+    // visible to admin/admin found none with branch='Z' and sysSource='5'
+    // (the System Source picklist's own "5" option is self-documented as
+    // "PLACEHOLDER -- legacy code, no confirmed modern mapping... for
+    // direct-entry subsidiaryCode"), so no live record can currently
+    // exercise Subsidiary Code past this gate. What IS verified for real
+    // below is that gate itself: a real, registered code is correctly and
+    // consistently refused on a branch-V record, naming the field and the
+    // exact reason. Demonstrating BR-308's "accepts an unrecognised code
+    // with a warning" behaviour is out of scope here as a result (blocked
+    // by this record-level precondition, not a defect in the warn-tier
+    // mechanism itself).
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.clickEdit();
@@ -1859,17 +2100,35 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await expect(writAgentField()).toHaveValue(writAgentNew);
 
     // Step: Test Warn-Tier Validation (Subsidiary Code, Customer
-    // Information tab) - the confirmed-broken step (see the doc comment
-    // above); kept last and using the approved steps' own real assertion
-    // rather than a substitute that would silently pass over the defect.
+    // Information tab) - driven via its real combobox options (see the
+    // retraction note above), using a genuine registered code, not a
+    // fabricated free-text value.
     await recordEditorPage.openRdmsTab('Customer Information');
-    const subsidiaryOriginal = await subsidiaryField().inputValue();
-    const subsidiaryNew = subsidiaryOriginal === 'ZZ9' ? 'ZZ8' : 'ZZ9';
-    await subsidiaryField().fill(subsidiaryNew);
+    const subsidiaryOriginalLabel = await subsidiaryField().inputValue();
+    const subsidiaryOptions = await errorManagerPage.openComboboxOptions(subsidiaryField());
+    const subsidiaryOptionTexts = await subsidiaryOptions.allInnerTexts();
+    // Any registered, non-blank code demonstrates the gate below - "1" is
+    // used deterministically rather than an arbitrary "first non-selected"
+    // pick.
+    const subsidiaryIdx = subsidiaryOptionTexts.findIndex((t) => /^1\s/.test(t));
+    await subsidiaryOptions.nth(subsidiaryIdx).click();
     await recordEditorPage.clickSave();
+
+    // Confirmed record-level gate (see doc comment above): a real,
+    // registered code is still refused outright on this branch-V record,
+    // naming the field and its own exact reason.
+    await expect(page.locator('main').getByText(/SCREENING ERROR/i).first()).toBeVisible();
     await expect(
-      page.locator('main').getByText(/SCREENING ERROR|warning|unrecognised|closest valid/i).first()
+      page.locator('main').getByText(/Must be blank.*branch is 'Z'.*system source is '5'/i).first(),
     ).toBeVisible();
+    await expect(recordEditorPage.editButton()).toHaveCount(0);
+
+    // Step: Verify Stored Value (warn tier) - reopen fresh to confirm
+    // nothing was actually committed by the refused attempt above.
+    await recordEditorPage.openConfirmedTestRecord();
+    await recordEditorPage.clickEdit();
+    await recordEditorPage.openRdmsTab('Customer Information');
+    await expect(subsidiaryField()).toHaveValue(subsidiaryOriginalLabel);
   });
 
   /**

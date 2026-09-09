@@ -112,9 +112,24 @@ export const SENARY_TEST_POLICY_NUMBER = process.env.PRU_SENARY_TEST_POLICY_NUMB
 // which fully confirmed the amend+save+transition mechanism works end to end; the only
 // remaining gap that run exposed was TMS-E2E-020's own final assertion checking case-sensitive
 // 'OPEN' when the grid actually renders this status as "Open" (mixed case) - fixed with
-// case-insensitive regexes. Switched again to this replacement, live-confirmed New and
-// un-mutated: ECN RD202636900290, Error ID 9086.
-export const NEW_STATUS_TEST_POLICY_NUMBER = process.env.PRU_NEW_STATUS_TEST_POLICY_NUMBER ?? '300000290';
+// case-insensitive regexes. Switched again to 300000290 (ECN RD202636900290, Error ID 9086) -
+// consumed by a fourth successful run (2026-09-08, full 35-test suite run), further confirming
+// the mechanism. Switched to 300000245 (ECN RD202636900245, Error ID 4010) - consumed by a
+// fifth successful run (2026-09-08); the run's own final assertion (waiting for the Edit
+// button to reappear) hit a slow/transient environment moment and reported a false failure,
+// but the underlying save+transition itself is confirmed to have genuinely committed (the
+// immediate retry correctly failed its own "still New" precondition check against the same
+// now-Open record). Switched to 300000220 (ECN J7202636900220, branch 5) - live-confirmed
+// (2026-09-08) this and its predecessor (J7202636900265, also branch 5, independently found
+// broken while fixing TMS-E2E-012) share a real, unrelated pre-existing data issue specific to
+// Debit Insurance branches (4, 5): "AGREE NUMBER Must be 6 numeric digits for Debit Insurance
+// branches (4, 5)" is violated by this environment's own seeded Agree Number values for those
+// branches (e.g. "AG0220" - alphanumeric, not 6 digits), which blocks ANY save on the record
+// regardless of what field this case edits - reproducible on a completely fresh record, so this
+// is a systemic seed-data characteristic of branch 4/5 records here, not this fixture's own
+// fault. Switched again to this replacement (branch N, not 4 or 5), live-confirmed New and
+// un-mutated: ECN RD202636900200, Error ID 0018.
+export const NEW_STATUS_TEST_POLICY_NUMBER = process.env.PRU_NEW_STATUS_TEST_POLICY_NUMBER ?? '300000200';
 
 // Dedicated fixture (2026-09-02) for the RDMS Trailer Information tab's PRUPAC variant
 // (prupacTrailer.* fields - Address/Rejection Information, the Agent Allocation Grid and its
