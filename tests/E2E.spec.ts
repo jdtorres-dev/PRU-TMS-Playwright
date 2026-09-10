@@ -47,6 +47,7 @@ function cycleWeeksFromNow(weeks: number): string {
 }
 
 test.describe('E2E - Error Manager end-to-end business journeys', () => {
+  test.describe.configure({ mode: 'default' });
   // Live-confirmed root cause of most of this file's non-deterministic
   // failures: with Playwright's default fullyParallel scheduling, many of
   // these 35 cases open and mutate the SAME shared live record
@@ -1649,7 +1650,15 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // newline-separated role=button cells - see TMS-E2E-032's identical
     // finding - so each field is pulled out by its own unambiguous pattern
     // rather than a fixed column index).
+    // Live-confirmed on this environment: navigation to /errors can
+    // resolve (per the browser's own "load" event) before the SPA has
+    // actually finished rendering its own tabs - the CB Records tab click
+    // right after goto() has repeatedly timed out for exactly this reason
+    // while diagnosing this case. Waiting for it to actually be visible
+    // first (a generous timeout, since this is exactly where the
+    // environment has been slow) absorbs that gap instead of racing it.
     await errorManagerPage.goto();
+    await expect(page.getByRole('tab', { name: 'CB Records', exact: true })).toBeVisible({ timeout: 30_000 });
     await errorManagerPage.selectSearchTab('CB Records');
     await errorManagerPage.allWeeksRadio().check();
     const statusField = page.locator('#statusCode');
@@ -1701,6 +1710,32 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       'no live New-status candidates found today (excluding TEST_POLICY_NUMBER and branch 4/5)',
     ).toBeGreaterThan(0);
 
+    // Local replacement for RecordEditorPage.openRecordByPolicyNumber()
+    // with the same post-navigation visibility guard used above - applied
+    // here rather than in that shared helper (used across the whole
+    // suite) to keep this defensive change scoped to this case.
+    const openCandidateByPolicyNumber = async (policyNumber: string) => {
+      await errorManagerPage.goto();
+      await expect(page.getByRole('tab', { name: 'CB Records', exact: true })).toBeVisible({ timeout: 30_000 });
+      await errorManagerPage.selectSearchTab('CB Records');
+      await errorManagerPage.allWeeksRadio().check();
+      await errorManagerPage.policyNumberField().fill(policyNumber);
+      await errorManagerPage.viewRecords();
+      await page
+        .getByRole('link', { name: /^\d+$/ })
+        .or(page.getByRole('button', { name: /^\d+$/ }))
+        .or(page.getByRole('cell', { name: /^\d+$/ }))
+        .first()
+        .click();
+      // Wait for the record editor to actually finish rendering before the
+      // caller reads its status - the status check right after this call
+      // uses .count(), which (unlike an expect(...).toBeVisible()
+      // assertion) does not auto-wait/retry, so reading it before the page
+      // has settled can return a false "not found" and wrongly treat a
+      // genuinely New candidate as already consumed.
+      await expect(page.getByText('General Information').first()).toBeVisible({ timeout: 20_000 });
+    };
+
     // Step: Open New Transaction - try each candidate in turn until one
     // actually saves cleanly. Live-confirmed: on a shared, actively-churning
     // environment, several candidates the search just listed as New can
@@ -1710,7 +1745,7 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // not enough headroom, so every discovered candidate is tried.
     let consumedPolicyNumber: string | undefined;
     for (const candidate of candidates) {
-      await recordEditorPage.openRecordByPolicyNumber(candidate);
+      await openCandidateByPolicyNumber(candidate);
       if (!(await page.getByText(/^New$/i).first().count())) continue;
 
       // Step: Edit and Save Changes.
@@ -1761,10 +1796,17 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
 
     // Step: Verify Updated Status.
     await errorManagerPage.goto();
+    await expect(page.getByRole('tab', { name: 'CB Records', exact: true })).toBeVisible({ timeout: 30_000 });
+    await errorManagerPage.selectSearchTab('CB Records');
     await errorManagerPage.allWeeksRadio().check();
     await errorManagerPage.policyNumberField().fill(consumedPolicyNumber!);
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
+    // The grid can briefly render placeholder/ghost rows before real data
+    // arrives (see the OPEN FINDING note at the top of this describe block)
+    // - reading rows before a real policy number has actually rendered is
+    // what left updatedRowText undefined here.
+    await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
     const trRows = await page.locator('tr').allInnerTexts();
     const buttonRows = await page.getByRole('button').filter({ hasText: /^Select \S/ }).allInnerTexts();
     const updatedRowText = [...trRows, ...buttonRows].find((r) => r.includes(consumedPolicyNumber!));
