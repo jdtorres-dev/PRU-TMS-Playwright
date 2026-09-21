@@ -41,7 +41,14 @@ export class LoginPage extends BasePage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto(`${BASE_URL}/login`);
+    // waitUntil: 'domcontentloaded' rather than the default 'load' - live-confirmed (2026-09-11,
+    // via a Playwright trace's own network log) that the default can hang indefinitely: it
+    // requires every last resource the page requests (including non-critical ones) to finish,
+    // and a single stalled request on this shared demo environment blocks goto() itself from
+    // ever resolving, before the test even gets a chance to wait on a real element. The
+    // signInButton() assertion below does the actual "is this screen ready" check via its own
+    // independent polling, so goto() only needs the DOM to exist, not every asset to finish.
+    await this.page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
     await expect(this.signInButton()).toBeVisible();
   }
 

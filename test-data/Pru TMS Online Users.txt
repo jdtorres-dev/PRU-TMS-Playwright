@@ -1,0 +1,68 @@
+Pru TMS Online Users
+
+user id: operator
+name: Operator One
+role: ROLE_OPERATOR
+rhoScope: [B, C, D, F, G, I]
+
+user id: qa
+name: QA Reviewer
+role: ROLE_QA_REVIEWER
+rhoScope: [B, C, E, F, G, I, R]
+
+user id: admin
+name: Admin User
+role: ROLE_ADMIN, ROLE_REFDATA_ADMIN
+rhoScope: [B, C, E, F, G, I, R]
+
+user id: o-0001
+name: Marcus Webb
+role: ROLE_OPERATOR
+rhoScope: [A, B, C, D, E, F, G, I, Q, R]
+
+user id: q-0001
+name: Priya Nair
+role: ROLE_QA_REVIEWER
+rhoScope: [A, B, C, D, E, F, G, I, Q, R]
+
+user id: o-0002
+name: Alicia Chen
+role: ROLE_OPERATOR
+rhoScope: [A, B, C]
+
+user id: o-0003
+name: Diego Ramirez
+role: ROLE_OPERATOR
+rhoScope: [C, D, G]
+
+user id: o-0004
+name: Sarah Kim
+role: ROLE_OPERATOR
+rhoScope: [E, F, I]
+
+user id: o-0005
+name: Tomasz Nowak
+role: ROLE_OPERATOR
+rhoScope: [A, G, Q, R]
+
+user id: q-0002
+name: Fatima Hassan
+role: ROLE_QA_REVIEWER
+rhoScope: [A, B, E]
+
+user id: q-0003
+name: Liam O'Brien
+role: ROLE_QA_REVIEWER
+rhoScope: [C, D, R]
+
+user id: q-0004
+name: Ngozi Eze
+role: ROLE_QA_REVIEWER
+rhoScope: [F, G, Q]
+
+user id: q-0005
+name: Elena Petrova
+role: ROLE_QA_REVIEWER
+rhoScope: [A, I, R]
+
+The password is “operator,” “qa,” or “admin,” depending on their assigned role.

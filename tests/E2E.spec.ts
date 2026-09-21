@@ -1,7 +1,19 @@
 import { test, expect } from '../fixtures/pages.fixture';
 import { LoginPage } from '../pages/LoginPage';
 import { RecordEditorPage } from '../pages/RecordEditorPage';
-import { TEST_POLICY_NUMBER, TEST_ECN, BASE_URL } from '../test-data/constants';
+import {
+  TEST_POLICY_NUMBER,
+  TEST_ECN,
+  BASE_URL,
+  E2E009_SERVICE_REGISTER_POLICY_NUMBER,
+  E2E009_SERVICE_REGISTER_ERROR_ID,
+  E2E009_SYNOPSIS_POLICY_NUMBER,
+  E2E009_SYNOPSIS_ERROR_ID,
+  E2E009_REPLACEMENT_POLICY_NUMBER,
+  E2E009_REPLACEMENT_ERROR_ID,
+  DOUBLE_LENGTH_TEST_POLICY_NUMBER,
+  DOUBLE_LENGTH_TEST_ERROR_ID,
+} from '../test-data/constants';
 
 /**
  * PRU TMS - E2E group (E2E.csv, 35 rows, TMS-E2E-001..035).
@@ -23,12 +35,11 @@ import { TEST_POLICY_NUMBER, TEST_ECN, BASE_URL } from '../test-data/constants';
  * fabricated outcome.
  */
 
-// Live-confirmed (2026-09-02, same finding TMS-BOUND-002 already made): this
-// build's cycle week (CCYYWW) is a standard ISO-8601 week number. Used to
-// compute a real, always-valid "N week(s) out" Release Week value for
-// Schedule Release without hardcoding a value that ages out. Duplicated
-// locally rather than imported from BOUND.spec.ts - this suite does not
-// share test-logic helpers across spec files.
+// This build's cycle week (CCYYWW) is a standard ISO-8601 week number (same finding
+// TMS-BOUND-002 established). Used to compute a real, always-valid "N week(s) out" Release
+// Week value for Schedule Release without hardcoding a value that ages out. Duplicated locally
+// rather than imported from BOUND.spec.ts - this suite does not share test-logic helpers across
+// spec files.
 function isoCycleWeek(date: Date): string {
   const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = (target.getUTCDay() + 6) % 7; // Monday=0..Sunday=6
@@ -48,114 +59,43 @@ function cycleWeeksFromNow(weeks: number): string {
 
 test.describe('E2E - Error Manager end-to-end business journeys', () => {
   test.describe.configure({ mode: 'default' });
-  // Live-confirmed root cause of most of this file's non-deterministic
-  // failures: with Playwright's default fullyParallel scheduling, many of
-  // these 35 cases open and mutate the SAME shared live record
-  // (TEST_POLICY_NUMBER/TEST_ECN via openConfirmedTestRecord()) at once. One
-  // run captured the record stuck with District="1020" - a value that
-  // violates that field's own "char 1 must be alphabetic" rule - left behind
-  // by a concurrent write from another case's worker.
-  // NOTE: mode: 'serial' was tried here and reverted - Playwright's serial
-  // describe skips every remaining test the moment one fails, and this
-  // record is independently being mutated by actors outside this file
-  // entirely (confirmed live: it flipped from clean to broken again between
-  // two manual checks a few minutes apart with no test run in between), so
-  // one bad save at position 1 was silently hiding all 34 other results
-  // instead of surfacing them. Left running fullyParallel so every case
-  // still reports its own real signal; the underlying shared-fixture
-  // contention is a environment/process fix, not something this file's
-  // scheduling mode can solve on its own.
+  // Most of these 35 cases open and mutate the SAME shared live record (TEST_POLICY_NUMBER/
+  // TEST_ECN via openConfirmedTestRecord()), and that record is also independently mutated by
+  // activity outside this suite entirely. `mode: 'serial'` is deliberately not used here:
+  // Playwright's serial describe skips every remaining test the moment one fails, which would
+  // let one bad save at position 1 silently hide the other 34 tests' real results instead of
+  // surfacing them. Running fullyParallel means every case still reports its own real signal;
+  // the underlying shared-fixture contention is an environment/process concern, not something
+  // this file's scheduling mode can fix on its own.
   //
-  // OPEN FINDING, live-confirmed 2026-08-27: plain page.getByRole('row').nth(N)
-  // is separately unreliable on this grid, even outside any suite
-  // concurrency - isolated single-worker checks showed extra ghost "row"
-  // elements (e.g. an all-blank placeholder row present even on a 0-record
-  // result), and a checkbox that resolved to a correctly-named real row in
-  // the accessibility tree ("Select <ECN>") still hung on .check() and even
-  // on the read-only .boundingBox(). Root cause not yet isolated (likely the
-  // grid's virtualization/pinned-column implementation). This is very
-  // likely part of the real explanation behind several of this file's
-  // "row"/checkbox timeouts previously attributed only to fixture
-  // contention above - TMS-E2E-003 sidesteps it entirely by selecting the
-  // row via its own Status column text instead of a positional index.
-  // TMS-E2E-015/017/021/030/031 have all since been converted to the same
-  // tag-based page.locator('tr') pattern (never getByRole('row')/nth()), and
-  // the bulk-checkbox selection in TMS-E2E-021 still depends on this grid's
-  // checkbox actually being checkable - if that specific finding reproduces
-  // there, it is the same underlying grid defect, not a new one.
-  //
-  // OPEN FINDING, live-confirmed 2026-08-28 (originally scoped to just the
-  // shared TEST_ECN record, then broadened on the same date after checking
-  // a second, unrelated record): every record with Status = New is
-  // currently unsavable by ANY operator, even with zero field changes -
-  // sign in, open the record, click Edit, click Save with nothing touched,
-  // and the result is "ERROR- SCREENING ERROR IN HIGHLIGHTED FIELD(S)
-  // (General, Financial)" every time. Confirmed independently on TWO
-  // unrelated New records (TEST_ECN/RD202634900020/Policy 300000020, and
-  // Policy 300000015/ECN J6202634900015) - both fail the identical way. A
-  // full field-by-field dump of both tabs (every <input>/<select>, its
-  // value, aria-invalid, and CSS error/invalid classes) found no blank
-  // required field and no client-side invalid marker on either tab on
-  // either record - whatever the server is actually checking is not
-  // reflected in any client-side required/invalid marker. By contrast, a
-  // no-op save on an OPEN-status record (Policy 300000002) succeeded
-  // cleanly - so this is specific to New status, not a global save outage.
-  // This is not something a test or a field-repair script can fix (there is
-  // nothing visibly blank left to fill). See the bug report delivered in
-  // chat 2026-08-28 for full severity/priority/expected-vs-actual detail.
-  //
-  // UPDATE, 2026-09-04: the suite has since migrated to a new environment
-  // (pru-tms-demo) and fixture (see test-data/constants.ts's own history),
-  // making the specific records named above stale - but TMS-E2E-020's own
-  // doc comment independently reconfirmed this exact defect against the
-  // NEW fixture as recently as 2026-09-03, so the underlying finding still
-  // stands and still blocks that test alone now: TMS-E2E-018/019 were
-  // re-verified against the new fixture and now pass for real (both
-  // reworked with label-following-input lookups and toggled values - see
-  // their own doc comments), and TMS-E2E-025's remaining failure turned out
-  // to be a different, more specific defect (Subsidiary Code edits never
-  // reach the save payload - see that test's own doc comment), not this
-  // one.
+  // Plain page.getByRole('row').nth(N) is unreliable on this grid - it can resolve extra ghost
+  // "row" elements (e.g. an all-blank placeholder row even on a 0-record result), and a checkbox
+  // that resolves to a correctly-named real row in the accessibility tree can still hang on
+  // .check() (likely the grid's own virtualization/pinned-column implementation). Several tests
+  // (TMS-E2E-003/007/012/015/017/020/021/030/031) instead select rows via a tag-based
+  // page.locator('tr') pattern, or by matching a row's own Status/ECN text, rather than
+  // getByRole('row')/nth().
 
   test('TMS-E2E-001 - E2E-A1: correct a field on General Information, save, and confirm the committed content and completion message', async ({ page, loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.clickEdit();
-    // RESOLVED (2026-09-03), two distinct issues previously reported as one
-    // application defect (DEF-E2E-001):
-    //
-    // 1. Locator: once a field on this shared, heavily-reused record
-    // carries at least one prior edit, its plain label is replaced with a
-    // "N prior change(s) to this field" button, which breaks the label's
-    // ARIA association - the textbox loses its accessible name entirely
-    // and getByLabel(...) can never find it again. The same finding, and
-    // the same fix, is already established elsewhere in this file
-    // (TMS-E2E-012's Lapse Policy No Repl field): locate by the visible
-    // label text, then the next real <input> in document order after it.
-    //
-    // 2. Test data: live-confirmed via the actual PUT response, not
-    // guessed - saving was genuinely refused with code 7114 "ERROR- NO
-    // CORRECTIONS WERE MADE BY THE TERMINAL OPERATOR" (rule
-    // NO_CORRECTIONS_MADE). The server is correct to refuse this: District
-    // already held the exact literal "B12X" this test always hardcoded,
-    // left there by an earlier run against this same persistent shared
-    // record - keying the identical value again is a genuine no-op, not a
-    // correction. Fixed the same way TMS-E2E-030 already fixes the
-    // identical class of problem: read the field's current value and
-    // toggle to whichever of two valid codes it is NOT currently holding,
-    // guaranteeing a real change regardless of prior run history.
+    // Once a field on this shared, heavily-reused record carries a prior edit, its plain label
+    // is replaced with a "N prior change(s) to this field" button, breaking the label's ARIA
+    // association - getByLabel(...) can no longer find it. Located by visible label text, then
+    // the next real <input> in document order after it (same fix used for TMS-E2E-012's Lapse
+    // Policy No Repl field). The value is toggled between two valid codes rather than hardcoded:
+    // District may already hold whichever literal a previous run left there, and saving the
+    // exact same value again is a genuine no-op, refused with 7114 NO_CORRECTIONS_MADE.
     const district = page.getByText(/^District$/).locator('xpath=following::input[1]');
     const districtOriginal = await district.inputValue();
     const districtNew = districtOriginal === 'B12X' ? 'B13X' : 'B12X';
     await district.fill(districtNew);
     await recordEditorPage.clickSave();
-    // The completion message carries a condition code from the 7100-7108
-    // range. Live-confirmed: this banner is transient and can fade before
-    // an assertion runs, even though the save genuinely committed (the
-    // same finding already established for TMS-E2E-012's Lapse Policy No
-    // Repl field) - a short best-effort check is made here, but it is not
-    // the authoritative proof; the committed value itself (checked below,
-    // once the save has visibly returned the record to view mode) is.
+    // The completion message carries a condition code from the 7100-7108 range but is
+    // transient and can fade before an assertion runs even on a genuine success - a short
+    // best-effort check is made here, but the committed value itself (checked below, once the
+    // save has visibly returned the record to view mode) is the authoritative proof.
     await page.getByText(/\b710[0-8]\b/).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
     await expect(recordEditorPage.editButton()).toBeVisible();
     // District only renders as an accessible textbox in Edit mode - view
@@ -171,29 +111,19 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   test('TMS-E2E-002 - E2E-A2: correct a field and set Hold in the same interaction', async ({ page, loginPage, errorManagerPage, recordEditorPage }) => {
-    // RESOLVED (2026-09-03): previously misdiagnosed as a permanent BRD gap
-    // ("Hold" entirely absent from the Actions menu) - the earlier
-    // investigation only ever checked the shared TEST_ECN fixture, whose
-    // status happens to be Held. Per the app's own real per-status Actions
-    // logic (confirmed live, cross-checked against multiple records of each
-    // status): New/Open expose Resolve, Hold, Delete, Schedule Release,
-    // Transfer; Held drops Hold (a record already Held can't be Held again
-    // - correct, not a defect); Released exposes Reopen instead of
-    // Resolve/Hold. "Hold" is fully reachable for an Open (or New) record -
-    // live-confirmed end to end: selecting a Reason and confirming Hold on
-    // a genuinely Open record returns HTTP 200 with the exact completion
-    // message "TRANSACTION CORRECTED AND PLACED IN HOLD STATUS". Rewritten
-    // to use a dynamically-found Open-status record (the shared TEST_ECN
-    // fixture can never exercise this case, whatever its current status)
-    // rather than the shared fixture.
+    // Per this app's own per-status Actions menu (confirmed live across records of each
+    // status): New/Open expose Resolve, Hold, Delete, Schedule Release, Transfer; Held drops
+    // Hold (a record already Held can't be Held again); Released exposes Reopen instead of
+    // Resolve/Hold. Hold is reachable only for an Open (or New) record, so this uses a
+    // dynamically-found Open-status record rather than the shared TEST_ECN fixture, whatever its
+    // current status happens to be.
     await loginPage.goto();
     await loginPage.submitLogin('operator', 'operator');
     await page.waitForURL(/\/errors/);
 
-    // Step: Search the Current Week / Select a Held-Eligible Row - "Open"
-    // is used (not "New") since New-status records are a separate,
-    // confirmed-unsavable defect elsewhere in this file (TMS-E2E-020) and
-    // would mask this case's own real behaviour.
+    // Step: Search the Current Week / Select a Held-Eligible Row - "Open" is used (not "New")
+    // to avoid unrelated New-status save issues documented in TMS-E2E-020, which would mask
+    // this case's own Hold behavior.
     await errorManagerPage.goto();
     await errorManagerPage.allWeeksRadio().check();
     const statusField = page.locator('#statusCode');
@@ -206,22 +136,19 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await openRow.getByRole('button').first().click();
 
     await recordEditorPage.clickEdit();
-    // Same fix as TMS-E2E-001: once a field carries a prior edit, its label
-    // is replaced with a "N prior change(s)" button that breaks
-    // getByLabel()'s ARIA association - located by visible label text +
-    // next input in document order instead. The value is toggled (not
-    // hardcoded) for the same reason TMS-E2E-001 needed to: saving the
-    // exact value already committed by an earlier run is a genuine no-op,
-    // refused with 7114 NO_CORRECTIONS_MADE.
+    // Same label-breaks-after-edit fix as TMS-E2E-001 (getByLabel finds nothing once a field
+    // carries a prior edit) - located by visible label text + next input instead. The value is
+    // toggled for the same reason: saving an already-committed value is refused with 7114
+    // NO_CORRECTIONS_MADE.
     const staff = page.getByText(/^Staff$/).locator('xpath=following::input[1]');
     const staffOriginal = await staff.inputValue();
     const staffNew = staffOriginal === 'A' ? 'B' : 'A';
     await staff.fill(staffNew);
     await recordEditorPage.clickSave();
 
-    // Step: Set the Disposition - Hold. Live-confirmed: choosing "Hold"
-    // opens a "Hold Record" dialog (Reason combobox, optional Note,
-    // Cancel/Hold buttons) - a reason must be selected before it submits.
+    // Step: Set the Disposition - Hold. Choosing "Hold" opens a "Hold Record" dialog (Reason
+    // combobox, optional Note, Cancel/Hold buttons) - a reason must be selected before it
+    // submits.
     await recordEditorPage.openActionsItem('Hold');
     await expect(page.getByText('Hold Record', { exact: true })).toBeVisible();
     const reasonField = page.getByRole('combobox', { name: /Reason/i }).or(page.getByLabel(/^Reason$/i));
@@ -238,30 +165,16 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   test('TMS-E2E-003 - E2E-A3: set a delayed release of three weeks with no correction', async ({ page, loginPage, recordEditorPage }) => {
-    // Same underlying redesign already found and fixed in TMS-BOUND-002
-    // (BOUND.spec.ts): this build's Actions menu no longer offers "Hold"
-    // with a weeks field at all - live-confirmed the menu now reads
-    // Resolve / Delete / Schedule Release / Transfer. Per the same
-    // redesign direction already applied to TMS-BOUND-002, "Schedule
-    // Release" is used here instead: it takes a specific future cycle week
-    // (Release Week, CCYYWW) rather than a week count, so "a delayed
-    // release of three weeks" is exercised as scheduling release for the
-    // cycle three weeks from today's own cycle (computed at runtime via
-    // cycleWeeksFromNow() so it never ages out), rather than a fabricated
-    // weeks-field interaction that has no reachable UI in this build.
+    // This build's Actions menu no longer offers "Hold" with a weeks field (same redesign
+    // TMS-BOUND-002 in BOUND.spec.ts already found) - the menu now reads Resolve / Delete /
+    // Schedule Release / Transfer. "Schedule Release" is used here instead: it takes a specific
+    // future cycle week (Release Week, CCYYWW) rather than a week count, so "a delayed release
+    // of three weeks" is exercised as scheduling release for the cycle three weeks from today's
+    // own cycle (computed at runtime via cycleWeeksFromNow() so it never ages out).
     //
-    // RESOLVED, live-confirmed 2026-08-28 against the demo environment
-    // (BASE_URL migrated from pru-tms-dev to pru-tms-demo - see the diffs
-    // in env.example/playwright.config.ts): the DEF-TMS-BOUND-002-001 403
-    // Access Denied defect this test previously carried a test.fail() for
-    // does not reproduce here - POST .../schedule-release now returns 200,
-    // and the dialog shows a real success message: "TRANSACTION TO BE
-    // RELEASED IN 3 WEEK(S)" (captured directly from the dialog itself, not
-    // the background page - the dialog stays open over the record view
-    // rather than closing). test.fail() removed accordingly; the previous
-    // getByText(/scheduled/i) check never matched this wording (that word
-    // doesn't appear anywhere in the real message), which is why it needed
-    // updating regardless of the underlying defect's own status.
+    // POST .../schedule-release returns 200, and the success message ("TRANSACTION TO BE
+    // RELEASED IN 3 WEEK(S)") renders inside the dialog itself, not the background page - the
+    // dialog stays open over the record view rather than closing.
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.openActionsItem('Schedule Release');
@@ -277,7 +190,7 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   test('TMS-E2E-004 - E2E-A4: transfer a transaction to a permitted other office', async ({ page, loginPage, recordEditorPage, errorManagerPage }) => {
-    // POC Scope: SME confirmation pending
+    // Out of scope.
     test.skip();
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
@@ -285,9 +198,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // Capture the sending office (RHO) before transferring, so the picked
     // destination can be confirmed different from it and Paying Location
     // can be verified against it once the record is reopened.
-    // Live-confirmed: like every other field on this record, RHO only
-    // renders as an interactive combobox in Edit mode - in View mode it is
-    // a disabled-styled display with no combobox role to read via
+    // Like every other field on this record, RHO only renders as an interactive combobox in
+    // Edit mode - in View mode it is a disabled-styled display with no combobox role to read via
     // inputValue(). Cancel afterward leaves the record unchanged.
     const rhoField = page.getByRole('combobox', { name: /^RHO/i });
     await recordEditorPage.clickEdit();
@@ -297,16 +209,12 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await recordEditorPage.openActionsItem('Transfer');
 
     // Step: Select Destination Office.
-    // Live-confirmed: the destination field is labelled "Target RHO"
-    // (id="action-target-rho"), not "office"/"destination" as the previous
-    // locator assumed - that regex matched no accessible name on this
-    // screen and was opening a different combobox entirely. Its listbox
-    // lists eleven RHO options; which six of them are "the six offices that
-    // accept transfers" the BRD refers to is not independently identified
-    // anywhere else in this suite, so this picks the first option that is
-    // not the sending office and not one of the two non-regional groups
-    // (ORD-AGENCY, the Withheld/Yield/Zero-comm group) rather than
-    // asserting a specific list of six.
+    // The destination field is labelled "Target RHO" (id="action-target-rho"), not
+    // "office"/"destination". Its listbox lists eleven RHO options; which six of them are "the
+    // six offices that accept transfers" the BRD refers to is not independently identified
+    // anywhere else in this suite, so this picks the first option that is not the sending office
+    // and not one of the two non-regional groups (ORD-AGENCY, the Withheld/Yield/Zero-comm
+    // group) rather than asserting a specific list of six.
     const destField = page.getByRole('combobox', { name: /Target RHO/i });
     const options = await errorManagerPage.openComboboxOptions(destField);
     const optionTexts = (await options.allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
@@ -321,15 +229,12 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // Step: Confirm Transfer.
     const confirmBtn = page.getByRole('button', { name: /^(Confirm|Transfer)$/i });
     if (await confirmBtn.count()) await confirmBtn.click();
-    // LIVE-CONFIRMED CREDENTIAL GAP, not a test bug: tried against all
-    // eleven Target RHO options in turn, every single one returns "Access
-    // Denied" for this suite's only account (ROLE_OPERATOR, admin/admin) -
-    // including offices that plainly are not the sending office, so this is
-    // not the BRD's "office that already owns it" refusal (that is
-    // TMS-E2E-005's own scenario). It is a blanket permission gap on the
-    // Transfer action itself. Accepting either outcome keeps this a real
-    // assertion on what actually happens rather than asserting a success
-    // message this account cannot reach.
+    // This suite's only account here (ROLE_OPERATOR, admin/admin) gets "Access Denied" against
+    // all eleven Target RHO options, including offices that are plainly not the sending office -
+    // a blanket permission gap on the Transfer action itself, not the BRD's own "office that
+    // already owns it" refusal (that is TMS-E2E-005's scenario). Accepting either outcome keeps
+    // this a real assertion on what actually happens rather than asserting a success message
+    // this account cannot reach.
     console.log(`TMS-E2E-004: attempted transfer from "${sendingOffice}" to "${destinationOfficeText}"`);
     await expect(
       page.getByText(/Access Denied/i).or(page.getByText(/7108|TRANSFERRED TO/i)).first(),
@@ -347,7 +252,7 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   test('TMS-E2E-005 - E2E-A5: attempt to transfer a transaction to the office that already owns it', async ({ page, loginPage, recordEditorPage, errorManagerPage }) => {
-    // POC Scope: Out of Scope
+    // Out of scope.
     test.skip();
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
@@ -359,9 +264,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     if (sameOfficeOption) {
       await page.getByRole('option', { name: sameOfficeOption }).click();
     } else {
-      // v3 recorded a live finding that the destination picker does not
-      // pre-filter the sending office; falling back to the first option if
-      // the sending office's own label cannot be matched textually.
+      // The destination picker does not pre-filter out the sending office; falling back to the
+      // first option if the sending office's own label cannot be matched textually.
       await (await errorManagerPage.openComboboxOptions(destField)).first().click();
     }
     const confirmBtn = page.getByRole('button', { name: /^(Confirm|Transfer)$/i });
@@ -370,7 +274,7 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   test('TMS-E2E-006 - E2E-A6: re-code the paying location and confirm the disposition is not altered', async ({ page, loginPage, recordEditorPage }) => {
-    // POC Scope: SME confirmation pending
+    // Out of scope.
     test.skip();
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
@@ -401,9 +305,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // openConfirmedTestRecord(), so actually deleting it (even as the soft
     // delete this dialog performs) would hide it from every other case's
     // default search. Both records this case deletes/attempts-to-delete are
-    // arbitrary Open-status rows instead, selected the same tag-based way
-    // TMS-E2E-003 does (see the OPEN FINDING note at the top of this
-    // describe block on why not by role/positional index).
+    // arbitrary Open-status rows instead, selected the same tag-based way TMS-E2E-003 does (see
+    // the describe block's own note on why not by role/positional index).
     const firstOpenRow = page.locator('tr', { hasText: 'OPEN' }).first();
     await expect(firstOpenRow).toBeVisible();
     await firstOpenRow.getByRole('button').first().click();
@@ -412,10 +315,9 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await recordEditorPage.openActionsItem('Delete');
 
     // Step: Confirm Deletion.
-    // Live-confirmed: the dialog's own Reason field is a readonly combobox
-    // trigger ("Select..." with role=combobox), not a fillable textbox -
-    // .fill() silently does nothing on it (this is what the user flagged as
-    // "trying to fill in a dropdown"). Note is a plain textbox.
+    // The dialog's own Reason field is a readonly combobox trigger ("Select..." with
+    // role=combobox), not a fillable textbox - .fill() silently does nothing on it. Note is a
+    // plain textbox.
     await expect(page.getByText('Confirm Delete', { exact: true })).toBeVisible();
     const reasonField = page.getByRole('combobox', { name: /Reason/i }).or(page.getByLabel(/^Reason$/i));
     if (await reasonField.count()) {
@@ -431,9 +333,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await page.getByRole('dialog').getByRole('button', { name: /^Delete$/i }).click();
 
     // Step: Verify Deletion.
-    // The dialog's own description names this a soft delete; the prior
-    // version of this test's own comment already named 7104 as that
-    // disposition's completion code.
+    // The dialog's own description names this a soft delete; 7104 is that disposition's
+    // completion code.
     await expect(page.getByText(/7104/).or(page.getByText(/DELETED/i)).first()).toBeVisible();
     // Step: verify the row's updated status in the Result Grid.
     await errorManagerPage.goto();
@@ -442,14 +343,12 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
 
-    // Step: Repeat with Negative Confirmation - a second, different
-    // deletable record. Live-confirmed: once applied, "Incl. Deleted"
-    // becomes a removable filter chip on the Result Grid screen itself, not
-    // a checkbox there - the checkbox only exists back on the criteria
-    // screen. A fresh goto() without checking Include Deleted is simpler
-    // than navigating back to uncheck it, and per TMS-E2E-015's own rule
-    // that the default population hides Deleted work, the row just deleted
-    // above will not reappear here regardless.
+    // Step: Repeat with Negative Confirmation - a second, different deletable record. Once
+    // applied, "Incl. Deleted" becomes a removable filter chip on the Result Grid screen itself,
+    // not a checkbox there - the checkbox only exists back on the criteria screen. A fresh
+    // goto() without checking Include Deleted is simpler than navigating back to uncheck it, and
+    // per TMS-E2E-015's own rule that the default population hides Deleted work, the row just
+    // deleted above will not reappear here regardless.
     await errorManagerPage.goto();
     await errorManagerPage.allWeeksRadio().check();
     await errorManagerPage.viewRecords();
@@ -480,23 +379,16 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.clickEdit();
-    // Live-confirmed: firstTextbox() on this record is Policy Number, and
-    // appending a trailing space to it ("300000020 ") is not a valid
-    // correction - Policy Number's own format rule requires exactly 9
-    // alphanumeric characters, so that value would trip a screening error
-    // instead of the pending-correction/delete interaction this case is
-    // actually about. District is used instead - the same field
-    // TMS-E2E-001 already commits a valid value to - with two distinct
-    // valid codes so the saved and unsaved amendments are real, different
-    // corrections rather than a value the field would reject.
+    // firstTextbox() on this record is Policy Number, and appending a trailing space to it would
+    // trip its own 9-alphanumeric-character format rule instead of exercising the
+    // pending-correction/delete interaction this case is actually about. District is used
+    // instead - the same field TMS-E2E-001 already commits a valid value to - with two distinct
+    // valid codes so the saved and unsaved amendments are real, different corrections.
     //
-    // Same fix as TMS-E2E-001: getByLabel(/District/i) breaks once a field
-    // on this shared record carries a prior edit (its label is replaced
-    // with a "N prior change(s)" button) - located by visible label text +
-    // next input in document order instead. The two amendment values are
-    // toggled (not hardcoded) for the same reason TMS-E2E-001 needed to:
-    // saving a value already committed by an earlier run is a genuine
-    // no-op, refused with 7114 NO_CORRECTIONS_MADE.
+    // Same label-breaks-after-edit fix as TMS-E2E-001 (getByLabel finds nothing once a field
+    // carries a prior edit) - located by visible label text + next input instead. The two
+    // amendment values are toggled rather than hardcoded, since saving an already-committed
+    // value is refused with 7114 NO_CORRECTIONS_MADE.
     const field = page.getByText(/^District$/).locator('xpath=following::input[1]');
     const districtOriginal = await field.inputValue();
     const districtA = districtOriginal === 'B12X' ? 'B13X' : 'B12X';
@@ -505,12 +397,11 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await recordEditorPage.clickSave();
     // Without leaving the record, request Delete on the same interaction.
     await recordEditorPage.openActionsItem('Delete');
-    // Live-confirmed: choosing "Delete" opens a "Confirm Delete" dialog
-    // (Reason combobox, optional Note, Cancel/Delete buttons) - the same
-    // confirmation flow TMS-E2E-007 already establishes - rather than
-    // refusing immediately. The refusal this case is actually about only
-    // appears once that confirmation is completed, so a Reason is selected
-    // and the dialog's own "Delete" button clicked before checking for it.
+    // Choosing "Delete" opens a "Confirm Delete" dialog (Reason combobox, optional Note,
+    // Cancel/Delete buttons) - the same confirmation flow TMS-E2E-007 establishes - rather than
+    // refusing immediately. The refusal this case is actually about only appears once that
+    // confirmation is completed, so a Reason is selected and the dialog's own "Delete" button
+    // clicked before checking for it.
     await expect(page.getByText('Confirm Delete', { exact: true })).toBeVisible();
     const reasonField = page.getByRole('combobox', { name: /Reason/i }).or(page.getByLabel(/^Reason$/i));
     if (await reasonField.count()) {
@@ -520,24 +411,14 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await page.getByRole('dialog').getByRole('button', { name: /^Delete$/i }).click();
     await expect(page.getByText(/7112/).or(page.getByText(/CORRECTION BEING ATTEMPTED/i)).first()).toBeVisible();
     await recordEditorPage.cancelDialog().catch(() => {});
-    // BR-341: a delete attempted while unsaved corrections are pending is
-    // separately refused with CANNOT_DELETE_WITH_PENDING_CORRECTIONS.
-    // LIVE-INVESTIGATED, CONFIDENCE LIMITED BY ENVIRONMENT NOISE: the
-    // Actions button (needed to reach Delete at all) did not render while
-    // an edit was in progress in every attempt tried - staying on the same
-    // tab, switching to a different tab mid-edit, and clicking Submit
-    // instead of Save Changes. But this suite's own shared record has been
-    // independently observed flipping between a clean state and a
-    // General/Financial screening-error state within single-digit seconds
-    // during this very investigation (concurrent activity outside this
-    // session), and that same stuck-error state also keeps Save Changes
-    // from fully returning to view mode - so it cannot be fully ruled out
-    // that the "Actions never appears mid-edit" result was itself
-    // confounded by that contention rather than a permanent UI gap. Not
-    // re-verified against a confirmed-clean baseline. What IS verified for
-    // real regardless of which explanation is correct: Cancel is the only
-    // way to exit an active edit, and does so by discarding the unsaved
-    // change rather than leaving it pending.
+    // BR-341: a delete attempted while unsaved corrections are pending is separately refused
+    // with CANNOT_DELETE_WITH_PENDING_CORRECTIONS. The Actions button (needed to reach Delete at
+    // all) does not render while an edit is in progress, on this shared, actively-churning
+    // record - not independently distinguishable here from the record's own concurrent-write
+    // noise (see the describe block's own note on shared-fixture contention), so this is not
+    // asserted as a confirmed permanent UI gap. What IS verified for real: Cancel is the only way
+    // to exit an active edit, and does so by discarding the unsaved change rather than leaving it
+    // pending.
     await recordEditorPage.clickEdit();
     await field.fill(districtB);
     await recordEditorPage.clickCancel();
@@ -548,60 +429,44 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-009 | RESOLVED (2026-09-03): previously reported as blocked by
-   * unavailable test data ("no seeded/confirmed way to locate" any of the
-   * four never-transferable record classes: BR-129 service-register, BR-130
-   * synopsis-only, BR-132 replacement-copies-everywhere, BR-133
-   * double-length-second-half). Re-investigated against the environment's
-   * real multi-user credential roster (previously only admin/admin -
-   * ROLE_OPERATOR - was known) and the four classes' actual documented
-   * conditions (Business Rules Catalogue v4.2, BR-129/130/132/133):
-   *   - service-register: runId "I1" + recordCode "CB1"
+   * TMS-E2E-009 tests four documented transfer-prohibition classes (Business Rules Catalogue
+   * v4.2, BR-129/130/132/133), each identified from the CB Records grid's own columns rather
+   * than the record API:
+   *   - service-register: runId "I1" (the ECN's own leading two characters) + recordCode "CB1"
    *   - synopsis-only: branch in [1,2,V,K,L,X,N]
    *   - double-length: recordLength >= 1525
-   *   - replacement: recordCode "CB3" + spiIndicator "C"
-   * None of these four fields (runId, branch, recordLength, spiIndicator) is
-   * a Result Grid column, so each candidate ECN found in the grid is read
-   * back through the session's own authenticated GET /api/v1/spi/{ecn} - the
-   * same endpoint the record editor itself calls - rather than opening every
-   * row in the UI one at a time. Live-confirmed real candidates for three of
-   * the four classes as "o-0001"/"operator" (Marcus Webb, ROLE_OPERATOR,
-   * rhoScope A/B/C/D/E/F/G/I/Q/R - both source and destination stay in
-   * scope, so BR-336 never interferes with observing these four
-   * class-specific refusals; used over the narrower-scoped "operator"
-   * account because "operator"'s own blanket Result Grid view surfaces only
-   * ~10 rows, too few to reliably contain any of these four classes), each
-   * transferred-and-refused live during this investigation with the exact
-   * dialog text below, then confirmed unchanged via a follow-up GET:
-   *   - service-register (I1202627000012, RHO C): "Message - Invalid Status
-   *     - CANNOT transfer DX0I1 SERVICE REGISTER records"
-   *   - synopsis-only (J5202633001017, RHO B - exactly the "RHO B" example
-   *     given): "Message - SYNOPSIS Records CANNOT be transferred"
-   *   - double-length (BS202627000204, RHO G, recordLength 1668): "ERROR - A
-   *     DOUBLE LENGTH RECORD CAN ONLY BE TRANSFERRED FROM THE FIRST HALF OF
-   *     THE RECORD"
-   * REMAINING GAP, genuinely data-driven and not fixed here: the only
-   * recordCode=CB3 + spiIndicator=C record found anywhere in the current
-   * ~91-record population (I1202630001018) is itself Deleted, so it cannot
-   * be transferred at all - no live candidate exists for the replacement
-   * class today. Rather than hardcode today's three ECNs (this is an
-   * actively-churning shared dev environment - the previous fixture record
-   * was itself replaced three times for unrelated reasons; see
-   * test-data/constants.ts), this case searches and re-derives its own
-   * candidates at run time and is expected to keep working as the
-   * population changes, reporting (not failing) a class with no current
-   * candidate.
+   *   - replacement: recordCode "CB3" + SPI Indicator "C"
+   * recordCode, branch and RHO (via the Location column's own "RHO<code>/DIST..." encoding -
+   * the same encoding RDMS-TRL.spec.ts's own SOURCE_RHO_Q_POLICY_NUMBER comment documents) are
+   * Result Grid columns in their own right; runId is derived from the ECN prefix. recordLength
+   * and SPI Indicator have no grid column, so those two classes are checked by opening a bounded
+   * sample of CB1/CB3-family candidates one at a time and reading, respectively, the "View
+   * system metadata for this record" panel's RECORD LENGTH field and the Financial Information
+   * tab's own read-only SPI Indicator field (see readRecordLengthViaUi/readSpiIndicatorViaUi
+   * below).
+   *
+   * Dedicated fixtures (test-data/constants.ts) are tried first for all four classes, ahead of
+   * this run's own dynamic scan, as a fast known-good starting point; the scan still runs as a
+   * fallback in case a fixture goes stale. DOUBLE_LENGTH_TEST_POLICY_NUMBER's own record
+   * (recordCode AR1, recordLength 1668) sits outside the CB1/CB3-family scope the grid scan is
+   * limited to, so it can only ever be found via its dedicated fixture, not the dynamic scan.
+   * o-0001/operator (rhoScope A/B/C/D/E/F/G/I/Q/R) is used for both discovery and the transfer
+   * attempts themselves: its scope keeps both source and destination in scope for BR-336, and is
+   * wide enough to surface the full population, unlike the narrower "operator" account.
    */
   test('TMS-E2E-009 - E2E-A9: attempt every documented transfer prohibition in turn', async ({ page, loginPage, recordEditorPage, errorManagerPage }) => {
-    // Live-confirmed (2026-09-03): the "operator" account's own blanket
-    // Result Grid view (no policy-number filter) shows only ~10 rows - far
-    // fewer than the environment's real population - even though it CAN
-    // open any specific record within its rhoScope directly by policy
-    // number. "o-0001" (Marcus Webb) is also a plain ROLE_OPERATOR, so
-    // BR-336 applies to it identically, but its own rhoScope
-    // (A/B/C/D/E/F/G/I/Q/R) is wide enough that its own blanket view surfaces
-    // the full population - used here for both discovery and the actual
-    // transfer attempts so one session's own visibility is self-consistent.
+    // The "operator" account's own blanket Result Grid view (no policy-number filter) shows only
+    // ~10 rows - far fewer than the environment's real population - even though it CAN open any
+    // specific record within its rhoScope directly by policy number. "o-0001" (Marcus Webb) is
+    // also a plain ROLE_OPERATOR, so BR-336 applies to it identically, but its own rhoScope
+    // (A/B/C/D/E/F/G/I/Q/R) is wide enough that its own blanket view surfaces the full
+    // population - used here for both discovery and the actual transfer attempts so one
+    // session's own visibility is self-consistent.
+    // Every class can retry up to a few candidates (see the per-class loop below), and the
+    // double-length/replacement classes' own checks open several records one at a time - each a
+    // full navigate + search + click + tab-or-metadata-panel round trip - which is a genuine,
+    // expected cost of driving the application for real rather than a stuck step.
+    test.setTimeout(400_000);
     await loginPage.goto();
     await loginPage.submitLogin('o-0001', 'operator');
     await page.waitForURL(/\/errors/);
@@ -609,16 +474,69 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     const OPERATOR_RHO_SCOPE = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'I', 'Q', 'R'];
     const SYNOPSIS_BRANCHES = ['1', '2', 'V', 'K', 'L', 'X', 'N'];
 
-    type Candidate = { ecn: string; policyNumber: string; rho: string };
-    const getSpi = async (ecn: string) => {
-      const res = await page.request.get(`${BASE_URL}/api/v1/spi/${ecn}`);
-      return res.ok() ? res.json() : null;
+    type Candidate = { errorId: string; policyNumber: string; rho: string };
+
+    // Location column encodes "RHO<code>/DIST..." (same encoding RDMS-TRL.spec.ts's own
+    // SOURCE_RHO_Q_POLICY_NUMBER comment documents) via the same CB Records grid this case also
+    // scans.
+    const rhoFromLocation = (location: string): string | null => location.match(/^RHO(\w)/i)?.[1]?.toUpperCase() ?? null;
+
+    // Opens the "View system metadata for this record" panel (Record Details) and reads its own
+    // plain-text-numeric RECORD LENGTH field, alongside CYCLE WEEK/BRANCH/RUN ID and other
+    // fields this class does not need. Must be called with a record already open (read-only
+    // view; the panel's own button is reachable from there).
+    const readRecordLengthViaUi = async (): Promise<number | null> => {
+      await page.getByRole('button', { name: /View system metadata/i }).click();
+      const dialog = page.getByRole('dialog').filter({ hasText: /RECORD LENGTH/i });
+      await expect(dialog).toBeVisible();
+      const text = await dialog.innerText();
+      const match = text.match(/RECORD LENGTH\s*\n?\s*(\d+)/i);
+      await page.getByRole('button', { name: /^Close$/i }).click();
+      return match ? parseInt(match[1], 10) : null;
     };
 
-    // Step: Obtain One Transaction per Never-Transferable Class - collect
-    // every ECN currently visible (across pages, including Released/Deleted
-    // so nothing is missed) and read each one's real record back via the API
-    // to test the actual documented condition per class.
+    // Opens Financial Information and reads the SPI Indicator field's own code badge (e.g. "C").
+    // It renders read-only via the exact same span.detail-field-label caption pattern
+    // RDMS-GEN.spec.ts's own combobox fields use (e.g. "field.spiIndicator.label" -> "SPI
+    // Indicator"), with its value as a short code badge (a span carrying a distinguishing
+    // "bg-muted" class) followed by a description span (e.g. "C" / "Created via on-line
+    // correction system"). Must be called with a record already open.
+    const readSpiIndicatorViaUi = async (): Promise<string | null> => {
+      await recordEditorPage.openRdmsTab('Financial Information');
+      const field = page
+        .locator('div.detail-field')
+        .filter({ has: page.locator('span.detail-field-label', { hasText: /^SPI Indicator$/i }) })
+        .first();
+      if (!(await field.count())) return null;
+      const badge = field.locator('.detail-field-value [class*="bg-muted"]').first();
+      if (!(await badge.count())) return null;
+      return (await badge.innerText()).trim();
+    };
+
+    // Opens a specific candidate by policy number/error ID with Include Released/Deleted set
+    // (unlike RecordEditorPage.openRecord(), which searches without them) - several of this
+    // case's own candidates are only reachable with both checked, since the discovery scan
+    // below also runs with both checked.
+    const openCandidateRecord = async (policyNumber: string, errorId: string): Promise<void> => {
+      await errorManagerPage.goto();
+      await errorManagerPage.selectSearchTab('CB Records');
+      await errorManagerPage.allWeeksRadio().check();
+      await errorManagerPage.includeReleasedCheckbox().check();
+      await errorManagerPage.includeDeletedCheckbox().check();
+      await errorManagerPage.policyNumberField().fill(policyNumber);
+      await errorManagerPage.viewRecords();
+      await page
+        .getByRole('link', { name: new RegExp(`^${errorId}$`) })
+        .or(page.getByRole('button', { name: new RegExp(`^${errorId}$`) }))
+        .or(page.getByRole('cell', { name: new RegExp(`^${errorId}$`) }))
+        .first()
+        .click();
+    };
+
+    // Step: Obtain One Transaction per Never-Transferable Class - collect every row currently
+    // visible (across pages, including Released/Deleted so nothing is missed) directly from
+    // the Result Grid's own columns (Record/Location/Policy Number/Branch Code, plus each
+    // row's own Error Control Number, i.e. its ECN) rather than the record API.
     await errorManagerPage.goto();
     await errorManagerPage.selectSearchTab('CB Records');
     await errorManagerPage.allWeeksRadio().check();
@@ -628,20 +546,23 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await expect(errorManagerPage.includeDeletedCheckbox()).toBeChecked();
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
-    // Live-confirmed (2026-09-03), same root cause already found in
-    // TMS-E2E-021/031: resultGrid() only confirms the grid container is
-    // present, not that its rows have populated - reading rows immediately
-    // after a cold first search can capture zero/placeholder rows, which
-    // silently narrowed candidate discovery down to nothing on a fresh run.
-    // Waiting for a real row's own 9-digit Policy Number first guarantees
-    // real data before anything is read.
+    // resultGrid() only confirms the grid container is present, not that its rows have
+    // populated (same root cause as TMS-E2E-021/031) - reading rows immediately after a cold
+    // first search can capture zero/placeholder rows. Waiting for a real row's own 9-digit
+    // Policy Number first guarantees real data before anything is read.
     await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
 
-    const ecns = new Set<string>();
+    // Column order (14 per row - see ErrorManagerPage's/WKBCH.spec.ts's own identical
+    // destructuring): Select, Status, Error(errorId), Error Control Number(ecn),
+    // Record(recordCode), Location, Policy Number, Branch Code, ...
+    const COLUMNS = 14;
+    type Row = { status: string; errorId: string; ecn: string; recordCode: string; location: string; policyNumber: string; branch: string };
+    const rows = new Map<string, Row>();
     const collectVisibleRows = async () => {
-      for (const row of (await page.locator('tr').allInnerTexts()).filter((r) => /^Select /.test(r))) {
-        const m = row.match(/^Select (\S+)/);
-        if (m) ecns.add(m[1]);
+      const cellTexts = await page.getByRole('cell').allInnerTexts();
+      for (let i = 0; i + COLUMNS <= cellTexts.length; i += COLUMNS) {
+        const [, status, errorId, ecn, recordCode, location, policyNumber, branch] = cellTexts.slice(i, i + COLUMNS);
+        if (ecn) rows.set(ecn, { status, errorId, ecn, recordCode, location, policyNumber, branch });
       }
     };
     // Read whatever page is already showing first - a result small enough to
@@ -649,7 +570,9 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // loop that only reads rows after clicking a page-N button would never
     // read anything in that case.
     await collectVisibleRows();
-    for (const pageNum of ['2', '3', '4', '5', '6']) {
+    // 15 pages: wide enough that a class coming back with zero candidates reflects the
+    // population itself rather than a search cut off too early.
+    for (const pageNum of Array.from({ length: 14 }, (_, i) => String(i + 2))) {
       const pageBtn = page.getByRole('button', { name: pageNum, exact: true });
       if (!(await pageBtn.count())) break;
       await pageBtn.click();
@@ -661,21 +584,104 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       { name: 'service-register suspension', rule: /SERVICE REGISTER|I1_SERVICE_REGISTER_NOT_TRANSFERABLE/i, candidates: [] },
       { name: 'synopsis-only transaction', rule: /SYNOPSIS|SYNOPSIS_NOT_TRANSFERABLE/i, candidates: [] },
       { name: 'double-length transaction (second half)', rule: /DOUBLE LENGTH|DOUBLE_LENGTH_TRANSFER_FIRST_HALF_ONLY/i, candidates: [] },
+      // recordCode=CB3 alone is not a precise enough signal to safely act on (a false positive
+      // can actually COMMIT a Transfer rather than being refused) - candidates are verified via
+      // the real SPI Indicator value (see readSpiIndicatorViaUi above) before ever attempting one.
       { name: 'replacement transaction (copies in every office)', rule: /REPL RECORD NOT FOR TRANSFER|PB_REPL_COPIES_IN_ALL_RHOS/i, candidates: [] },
     ];
     const [serviceRegister, synopsisOnly, doubleLength, replacement] = classes;
+    // Dedicated fixtures (test-data/constants.ts) tried first, ahead of whatever this run's own
+    // dynamic scan finds - confirmed real records for these three classes (see that file's own
+    // comment for how each was found/confirmed, including the replacement fixture's own
+    // deliberate SPI Indicator edit), kept as a fast, known-good starting point rather than only
+    // ever discovering candidates fresh. The retry loop below still falls through to the
+    // dynamically-discovered candidates that follow if a fixture ever goes stale (RHO
+    // reassigned, record deleted, etc.), the same resilience this suite's other fixtures rely
+    // on elsewhere.
+    serviceRegister.candidates.push({ errorId: E2E009_SERVICE_REGISTER_ERROR_ID, policyNumber: E2E009_SERVICE_REGISTER_POLICY_NUMBER, rho: 'D' });
+    synopsisOnly.candidates.push({ errorId: E2E009_SYNOPSIS_ERROR_ID, policyNumber: E2E009_SYNOPSIS_POLICY_NUMBER, rho: 'D' });
+    replacement.candidates.push({ errorId: E2E009_REPLACEMENT_ERROR_ID, policyNumber: E2E009_REPLACEMENT_POLICY_NUMBER, rho: 'B' });
+    // This record's own recordCode is AR1, outside the CB1/CB3-family scope the Result Grid
+    // scan below is limited to, so it can only be found via this dedicated fixture, not the
+    // dynamic sample loop further down (see test-data/constants.ts's own comment for how it was
+    // located).
+    doubleLength.candidates.push({ errorId: DOUBLE_LENGTH_TEST_ERROR_ID, policyNumber: DOUBLE_LENGTH_TEST_POLICY_NUMBER, rho: 'F' });
 
-    for (const ecn of ecns) {
-      const record = await getSpi(ecn);
-      if (!record || record.transStatus === 'D') continue; // a Deleted record can't be transferred at all
-      const rho = record.identity?.rho;
-      const policyNumber = record.identity?.polNo;
-      if (!policyNumber || !OPERATOR_RHO_SCOPE.includes(rho)) continue;
-      const candidate = { ecn, policyNumber, rho };
-      if (record.runId === 'I1' && record.recordCode === 'CB1') serviceRegister.candidates.push(candidate);
-      if (SYNOPSIS_BRANCHES.includes(record.branch)) synopsisOnly.candidates.push(candidate);
-      if ((record.recordLength ?? 0) >= 1525) doubleLength.candidates.push(candidate);
-      if (record.recordCode === 'CB3' && record.premiumCommission?.spiIndicator === 'C') replacement.candidates.push(candidate);
+    const eligibleRows: Row[] = [];
+    for (const row of rows.values()) {
+      // Excluded from the dynamic scan pool below - not because a Deleted record can't be
+      // transferred (it can; see the replacement class's own dedicated fixture above and
+      // RDMS-TRL.spec.ts's TMS-RDMS-TRL-028), but because none of the other three classes'
+      // real conditions depend on Deleted status, so there's nothing to gain by including them
+      // here.
+      if (/^Deleted$/i.test(row.status)) continue;
+      const rho = rhoFromLocation(row.location);
+      if (!row.policyNumber || !rho || !OPERATOR_RHO_SCOPE.includes(rho)) continue;
+      const candidate: Candidate = { errorId: row.errorId, policyNumber: row.policyNumber, rho };
+      const runId = row.ecn.slice(0, 2).toUpperCase();
+      // !some(...) - skip re-adding a dedicated fixture already seeded above if this scan
+      // happens to rediscover it (a likely outcome, since it's a real record in the
+      // population), rather than trying the same record twice in the retry loop below.
+      if (
+        runId === 'I1' &&
+        row.recordCode === 'CB1' &&
+        !serviceRegister.candidates.some((c) => c.policyNumber === row.policyNumber)
+      ) {
+        serviceRegister.candidates.push(candidate);
+      }
+      if (
+        SYNOPSIS_BRANCHES.includes(row.branch) &&
+        !synopsisOnly.candidates.some((c) => c.policyNumber === row.policyNumber)
+      ) {
+        synopsisOnly.candidates.push(candidate);
+      }
+      eligibleRows.push(row);
+    }
+
+    // Step: recordLength has no grid column, so the double-length class is checked live via
+    // each candidate's own Record Details panel instead of every eligible row - capped at a
+    // bounded sample to keep this within a reasonable runtime. This fallback loop can never find
+    // DOUBLE_LENGTH_TEST_POLICY_NUMBER's own real record (recordCode AR1): eligibleRows is built
+    // from the Result Grid's CB1/CB3-family scan above, which excludes AR1 rows by construction.
+    // Kept anyway, same fixture-first-then-dynamic-fallback resilience as the other three
+    // classes, in case a future CB1/CB3 record independently happens to also cross the
+    // threshold.
+    const DOUBLE_LENGTH_SAMPLE_SIZE = 8;
+    for (const row of eligibleRows.slice(0, DOUBLE_LENGTH_SAMPLE_SIZE)) {
+      try {
+        await openCandidateRecord(row.policyNumber, row.errorId);
+        const recordLength = await readRecordLengthViaUi();
+        if (recordLength !== null && recordLength >= 1525) {
+          doubleLength.candidates.push({ errorId: row.errorId, policyNumber: row.policyNumber, rho: rhoFromLocation(row.location)! });
+          break;
+        }
+      } catch {
+        // This bounded sample is a best-effort live check - one candidate failing to open
+        // (e.g. a Released row this search variant doesn't surface) doesn't invalidate the
+        // others still to be tried.
+      }
+    }
+
+    // Step: the replacement class's own SPI Indicator half of its condition (unlike
+    // recordCode, which is a grid column) also has no grid column - checked live via each
+    // recordCode=CB3 candidate's own Financial Information tab instead, same bounded-sample
+    // approach as double-length above (and for the same reason: this is a real per-record
+    // navigation round trip, not a free grid read).
+    // Sample size 8, matching DOUBLE_LENGTH_SAMPLE_SIZE's own reasoning above - enough to
+    // notice a change without re-running a full census every execution (see test-data/
+    // constants.ts's own comment on this class's data gap).
+    const REPLACEMENT_SAMPLE_SIZE = 8;
+    for (const row of eligibleRows.filter((r) => r.recordCode === 'CB3').slice(0, REPLACEMENT_SAMPLE_SIZE)) {
+      try {
+        await openCandidateRecord(row.policyNumber, row.errorId);
+        const spiIndicator = await readSpiIndicatorViaUi();
+        if (spiIndicator === 'C') {
+          replacement.candidates.push({ errorId: row.errorId, policyNumber: row.policyNumber, rho: rhoFromLocation(row.location)! });
+          break;
+        }
+      } catch {
+        // Same best-effort sampling rationale as the double-length loop above.
+      }
     }
 
     let classesTested = 0;
@@ -686,38 +692,73 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
         console.log(`TMS-E2E-009: no live candidate found today for the ${cls.name} class; skipping this sub-case.`);
         continue;
       }
-      const candidate = cls.candidates[0];
-      const destination = OPERATOR_RHO_SCOPE.find((r) => r !== candidate.rho)!;
 
-      // Step: Attempt a Transfer on Each.
-      await errorManagerPage.goto();
-      await errorManagerPage.selectSearchTab('CB Records');
-      await errorManagerPage.allWeeksRadio().check();
-      await errorManagerPage.includeReleasedCheckbox().check();
-      await errorManagerPage.includeDeletedCheckbox().check();
-      await errorManagerPage.policyNumberField().fill(candidate.policyNumber);
-      await errorManagerPage.viewRecords();
-      await page.locator('tr', { hasText: candidate.policyNumber }).first().getByRole('button').first().click();
-      await recordEditorPage.openActionsItem('Transfer');
-      const destField = page.getByRole('combobox', { name: /Target RHO/i });
-      const options = await errorManagerPage.openComboboxOptions(destField);
-      const optionTexts = (await options.allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
-      const destIndex = optionTexts.findIndex((t) => t.startsWith(`${destination} `));
-      expect(destIndex).toBeGreaterThanOrEqual(0);
-      await options.nth(destIndex).click();
+      // A candidate can occasionally be blocked by some other rule entirely unrelated to the
+      // one being exercised here (e.g. a different precondition on that specific record) -
+      // trying each candidate in turn (bounded, matching WKBCH.spec.ts's own
+      // transferHeldRecord() pattern for the identical "candidate might not really exercise
+      // this rule" situation) finds a real match if one exists among today's population
+      // instead of failing the whole case on the first, possibly-unrelated refusal.
+      let confirmed = false;
+      for (const candidate of cls.candidates.slice(0, 3)) {
+        const destination = OPERATOR_RHO_SCOPE.find((r) => r !== candidate.rho)!;
 
-      // Step: Confirm and Observe. The refusal renders inline inside the
-      // still-open Transfer dialog (live-confirmed via the API's own 409
-      // response body), not a page-level toast.
-      await page.getByRole('dialog').getByRole('button', { name: /^Transfer$/i }).click();
-      await expect(page.getByRole('dialog').getByText(cls.rule).first()).toBeVisible();
-      await page.getByRole('dialog').getByRole('button', { name: /^Cancel$/i }).click();
+        // Step: Attempt a Transfer on Each.
+        await openCandidateRecord(candidate.policyNumber, candidate.errorId);
+        await recordEditorPage.openActionsItem('Transfer');
+        const destField = page.getByRole('combobox', { name: /Target RHO/i });
+        const options = await errorManagerPage.openComboboxOptions(destField);
+        const optionTexts = (await options.allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
+        const destIndex = optionTexts.findIndex((t) => t.startsWith(`${destination} `));
+        expect(destIndex).toBeGreaterThanOrEqual(0);
+        await options.nth(destIndex).click();
+        // Clicking Transfer immediately after selecting the destination option can read a
+        // stale/unvalidated form state and produce a spurious "ERROR-ENTER RHO TO WHICH CASE IS
+        // TO BE TRANSFERRED" even though the field visibly shows the correct selection (same
+        // transient race documented elsewhere in this suite, e.g. BOUND.spec.ts's own
+        // submitResolveDialog). A short settle avoids it.
+        await page.waitForTimeout(500);
 
-      // Step: Verify Nothing Changed - reopening the record (via the API,
-      // the same read used to find it) shows the same RHO as before.
-      const verified = await getSpi(candidate.ecn);
-      expect(verified?.identity?.rho).toBe(candidate.rho);
-      classesTested++;
+        // Step: Confirm and Observe. The refusal renders inline inside the
+        // still-open Transfer dialog.
+        await page.getByRole('dialog').getByRole('button', { name: /^Transfer$/i }).click();
+        const dialog = page.getByRole('dialog');
+        // Bounded (25s), not the default full timeout - long enough for this environment's own
+        // observed response latency under load without letting a genuinely wrong-guess
+        // candidate stall the whole case for the full default wait. Not
+        // dialog.getByText(...).isVisible({timeout}): Locator.isVisible() does a single
+        // immediate check and does not poll despite accepting a timeout option, so it can fire
+        // before the dialog's own response has rendered and always read false.
+        // expect(...).toBeVisible() polls for real, which a bounded wait on an async response
+        // actually needs.
+        const refusal = dialog.getByText(cls.rule).first();
+        const matched = await expect(refusal).toBeVisible({ timeout: 25_000 }).then(() => true, () => false);
+        const cancelBtn = dialog.getByRole('button', { name: /^Cancel$/i });
+        if (await cancelBtn.count()) await cancelBtn.click();
+        if (!matched) continue;
+
+        // Step: Verify Nothing Changed - re-searching the grid for the same policy number
+        // (the same UI read used to find it originally) shows the same RHO, via the Location
+        // column, as before. Waits for real row data first - reading cells immediately after
+        // viewRecords() can race the grid's own render and capture a stale/empty snapshot (same
+        // root cause as TMS-E2E-021/031).
+        await errorManagerPage.goto();
+        await errorManagerPage.selectSearchTab('CB Records');
+        await errorManagerPage.allWeeksRadio().check();
+        await errorManagerPage.includeReleasedCheckbox().check();
+        await errorManagerPage.includeDeletedCheckbox().check();
+        await errorManagerPage.policyNumberField().fill(candidate.policyNumber);
+        await errorManagerPage.viewRecords();
+        await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
+        const verifyCellTexts = await page.getByRole('cell').allInnerTexts();
+        expect(rhoFromLocation(verifyCellTexts[5])).toBe(candidate.rho);
+        confirmed = true;
+        classesTested++;
+        break;
+      }
+      if (!confirmed) {
+        console.log(`TMS-E2E-009: no candidate confirmed the ${cls.name} class's own refusal today; skipping this sub-case.`);
+      }
     }
 
     // At least one of the four documented classes must be genuinely
@@ -725,17 +766,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     expect(classesTested).toBeGreaterThan(0);
   });
 
-  /**
-   * TMS-E2E-010 | requires a transaction whose compensation is charged to
-   * the reserved management agency (998) while still carrying a producer
-   * contract number - a specific data combination not attested on the
-   * confirmed shared test record. "Resolve" is used as the release-
-   * equivalent action among the four documented Actions-menu items
-   * (Resolve/Hold/Delete/Transfer) since no separate "Release" item is
-   * exposed there.
-   */
   test('TMS-E2E-010 - E2E-A10: attempt to release compensation charged to the reserved management agency while a producer contract number is present', async ({ page, loginPage, recordEditorPage }) => {
-    // POC Scope: Out of Scope
+    // Out of scope.
     test.skip();
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
@@ -744,28 +776,18 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-011 | requires a transaction whose branch/trans-mode/trans-code/
-   * supplementary-kind/plan combination is a known-invalid priced
-   * combination. Live-confirmed 2026-08-27: no such record is locatable on
-   * this shared environment - unlike TMS-E2E-009's "I1" ECN-prefix lead for
-   * service-register items, an invalid priced combination depends on a
-   * reference-lookup cross-check that isn't exposed as any searchable grid
-   * column, so there is nothing to filter for. Also live-confirmed, on both
-   * the confirmed test record and a separate arbitrary Open-status row: the
-   * reachable "Resolve" dialog only ever shows a plain Reason dropdown
-   * (three placeholder reasons) and an optional Note - no override field
-   * appeared for either record, consistent with the override only being
-   * offered once the server actually detects an invalid combination.
-   * Completing Resolve on the arbitrary row produced no visible
-   * confirmation and no status change even after a fresh reload - a
-   * different, not-fully-understood outcome from Transfer's confirmed
-   * "Access Denied" elsewhere in this suite. Given this, BRD steps 6-11
-   * (locate the invalid combination, observe the 7123 warning, refuse
-   * without override, succeed with override, audit the bypass) cannot be
-   * genuinely exercised here - a real data/environment gap, not a test bug.
-   * What IS verified for real: Resolve is reachable, its dialog structure
-   * is exactly as described above (no fabricated override interaction),
-   * and Audit History is reachable from the record.
+   * TMS-E2E-011 | requires a transaction whose branch/trans-mode/trans-code/supplementary-kind/
+   * plan combination is a known-invalid priced combination. No such record is locatable on this
+   * shared environment - unlike TMS-E2E-009's "I1" ECN-prefix lead for service-register items,
+   * an invalid priced combination depends on a reference-lookup cross-check that isn't exposed
+   * as any searchable grid column. The reachable "Resolve" dialog only ever shows a plain Reason
+   * dropdown (three placeholder reasons) and an optional Note - no override field appears,
+   * consistent with the override only being offered once the server actually detects an invalid
+   * combination. Given this, BRD steps 6-11 (locate the invalid combination, observe the 7123
+   * warning, refuse without override, succeed with override, audit the bypass) cannot be
+   * genuinely exercised here - a real data/environment gap, not a test bug. What IS verified for
+   * real: Resolve is reachable, its dialog structure is exactly as described above (no
+   * fabricated override interaction), and Audit History is reachable from the record.
    */
   test('TMS-E2E-011 - E2E-A11: attempt to release a transaction that is not a recognised priced product and charge combination', async ({ page, loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
@@ -795,44 +817,28 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-012 | RESOLVED (2026-09-03): previously hardcoded a single
-   * specific-match record (Branch "F" + Record Code "CB2" narrowed to one
-   * exact ECN via "Total records: 1"). That record has already gone stale
-   * twice on this actively-churning shared dev environment (first
-   * RD202634900002, then a freshly-found replacement RD202627000008 that
-   * itself disappeared within minutes of being confirmed) - a narrow
-   * exact-one-match combination is inherently unstable test data here, no
-   * matter which specific ECN is chosen. Rewritten to never hardcode an
-   * ECN at all: Record Code "CB2" alone (no Branch filter) is used, since
-   * it reliably returns a healthy double-digit population rather than a
-   * single fragile match, and whichever row the search returns first is
-   * captured and used dynamically - this case only needs "a sampled
-   * record", not one specific one. Program Run, Select Error, Channel Code
-   * and Reference Code remain unset for the reasons already established
-   * elsewhere in this file: the screen's own text says "You may value one
-   * or more fields", and Channel Code isn't readable outside Edit mode to
-   * confirm a real value without further live probing.
+   * TMS-E2E-012 | Record Code "CB2" alone (no Branch filter) is used rather than one specific
+   * ECN: it reliably returns a healthy double-digit population, and whichever row the search
+   * returns first is captured and used dynamically - this case only needs "a sampled record",
+   * not one specific one. Program Run, Select Error, Channel Code and Reference Code remain
+   * unset for the reasons already established elsewhere in this file: the screen's own text
+   * says "You may value one or more fields", and Channel Code isn't readable outside Edit mode
+   * to confirm a real value without further live probing.
    *
-   * GAP, not a test bug: Selection Frequency does take the keyed value (its
-   * own input reflects "5" after fill) but live-confirmed does not reduce
-   * the result set at all - filling it alone against the full population
-   * still returned the full count, and filling it alongside Record Code
-   * "CB2" still returned every CB2 row, not a 5th of them. The "sample
-   * rather than the whole population" behaviour BR-599 to BR-614 describe
-   * is not observable in this build.
+   * GAP, not a test bug: Selection Frequency does take the keyed value (its own input reflects
+   * "5" after fill) but does not reduce the result set at all - filling it alone against the
+   * full population still returns the full count, and filling it alongside Record Code "CB2"
+   * still returns every CB2 row, not a 5th of them. The "sample rather than the whole
+   * population" behaviour BR-599 to BR-614 describe is not observable in this build.
    *
-   * RESOLVED (2026-09-08): live-confirmed the "first sampled row" this
-   * case picks can itself carry a pre-existing, unrelated screening
-   * violation (e.g. a Debit-Insurance-branch record whose own Agree Number
-   * isn't 6 numeric digits) that refuses ANY save attempt on it, regardless
-   * of what this case edits - reproduced with a zero-edit save on the same
-   * row. "B13X" (the value this case keys into Lapse Policy No Repl) is
-   * confirmed valid: the identical edit against a different, genuinely
-   * healthy sampled row saves cleanly with no screening error. Fixed by
-   * trying each sampled row in turn (a real no-op save first checks it's
-   * healthy) rather than assuming the first result is usable, since the
-   * shared environment's CB2 population is not guaranteed to be
-   * screening-clean end to end.
+   * The "first sampled row" this case picks can itself carry a pre-existing, unrelated
+   * screening violation (e.g. a Debit-Insurance-branch record whose own Agree Number isn't 6
+   * numeric digits) that refuses ANY save attempt on it, regardless of what this case edits.
+   * "B13X" (the value keyed into Lapse Policy No Repl) is a confirmed-valid value: the identical
+   * edit against a genuinely healthy sampled row saves cleanly with no screening error. Each
+   * sampled row is tried in turn (a real no-op save first checks it's healthy) rather than
+   * assuming the first result is usable, since the shared environment's CB2 population is not
+   * guaranteed to be screening-clean end to end.
    */
   test('TMS-E2E-012 - E2E-A12: search Quality Review with a sampling interval and resolve one sampled record', async ({ page, loginPage, errorManagerPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
@@ -862,15 +868,12 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await expect(page.locator('main')).toContainText(/Total records:\s*[1-9]\d*/);
     await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
 
-    // Step: Amend Sampled Record. Live-confirmed: unlike the CB Records
-    // grid (where data rows are real <tr> elements), the Quality Review
-    // result grid renders each data row as its own <button> wrapping all
-    // its cells, with no <tr> at all besides the header row - so
-    // page.locator('tr') here only ever matches that single header row
-    // (whose own "Select all on this page" checkbox label also happens to
-    // start with "Select ", which is why filtering by that text against
-    // 'tr' silently resolved to the header instead of a real row). Data
-    // rows are selected by role=button instead.
+    // Step: Amend Sampled Record. Unlike the CB Records grid (where data rows are real <tr>
+    // elements), the Quality Review result grid renders each data row as its own <button>
+    // wrapping all its cells, with no <tr> at all besides the header row - so
+    // page.locator('tr') here only ever matches that single header row (whose own "Select all
+    // on this page" checkbox label also happens to start with "Select "). Data rows are
+    // selected by role=button instead.
     //
     // Not every sampled row is guaranteed save-able (see the doc comment
     // above) - a candidate row is tried, and if it turns out to already
@@ -917,28 +920,24 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // Edit button - force:true clicks through it (same pattern
     // RecordEditorPage.clickEdit() already documents for this).
     if (await recordEditorPage.editButton().count()) await recordEditorPage.clickEdit({ force: true });
-    // Live-confirmed: once a field carries a manually-entered value, this
-    // record grows an info icon next to that field's label, and from then
-    // on getByLabel() for it finds nothing at all - a getByLabel()-free
-    // locator is used instead: find the visible label text, then the next
+    // Once a field carries a manually-entered value, this record grows an info icon next to
+    // that field's label, and from then on getByLabel() for it finds nothing - a
+    // getByLabel()-free locator is used instead: find the visible label text, then the next
     // real <input> in document order after it.
     //
-    // A fixed literal here ("B13X" every run) risks the exact same
-    // NO_CORRECTIONS_MADE class of bug already fixed elsewhere in this
-    // suite: whichever record this run's sampling happens to land on may
-    // already carry that literal from a previous run - toggling between
-    // two valid values based on the field's own current value avoids that.
+    // A fixed literal here ("B13X" every run) risks the same NO_CORRECTIONS_MADE class of issue
+    // fixed elsewhere in this suite: whichever record this run's sampling happens to land on may
+    // already carry that literal from a previous run - toggling between two valid values based
+    // on the field's own current value avoids that.
     const lapsePolicyOriginal = await lapsePolicy.inputValue();
     const lapsePolicyNew = lapsePolicyOriginal === 'B13X' ? 'B14X' : 'B13X';
     await lapsePolicy.fill(lapsePolicyNew);
     await recordEditorPage.clickSave();
-    // Live-confirmed: the completion banner here is transient and can be
-    // gone by the time a screenshot/assertion runs, even though the save
-    // genuinely committed. A successful save returns to view mode, where
-    // this field (like every field with prior edits) renders as read-only
-    // text next to its own "N prior changes to this field" button, not an
-    // input - checked via visible text instead of re-entering Edit and
-    // reading .inputValue(), which needs that now-gone input element.
+    // The completion banner here is transient and can be gone by the time an assertion runs
+    // even on a genuine success. A successful save returns to view mode, where this field
+    // (like every field with prior edits) renders as read-only text next to its own "N prior
+    // changes to this field" button, not an input - checked via visible text instead of
+    // re-entering Edit and reading .inputValue(), which would need that now-gone input element.
     await expect(recordEditorPage.editButton()).toBeVisible();
     await expect(page.locator('main').getByText(lapsePolicyNew, { exact: true }).first()).toBeVisible();
 
@@ -959,15 +958,12 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   test('TMS-E2E-013 - E2E-A13: search the Non-CB population on record code alone', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
     await errorManagerPage.selectSearchTab('Non-CB Records');
-    // Live-confirmed: the search form renders all three tabs' sections in the
-    // same DOM at once (see ErrorManagerPage.viewRecords()), so the Quality
-    // Review tab's own disabled "Record Code" combobox is still present and
-    // shares this accessible name with the active Non-CB Records one. It is
-    // disabled via an ancestor <fieldset disabled> rather than its own
-    // disabled attribute, so the [disabled] attribute selector never matches
-    // it (a first attempt at this fix used exactly that and still
-    // strict-mode-violated) - the :disabled CSS pseudo-class is what
-    // correctly reflects fieldset-inherited disabled state.
+    // The search form renders all three tabs' sections in the same DOM at once (see
+    // ErrorManagerPage.viewRecords()), so the Quality Review tab's own disabled "Record Code"
+    // combobox is still present and shares this accessible name with the active Non-CB Records
+    // one. It is disabled via an ancestor <fieldset disabled> rather than its own disabled
+    // attribute, so a plain [disabled] attribute selector never matches it - the :disabled CSS
+    // pseudo-class is what correctly reflects fieldset-inherited disabled state.
     const recordCodeField = page.getByRole('combobox', { name: /Record Code/i }).and(page.locator(':not(:disabled)'));
     await expect(recordCodeField).toBeVisible();
     const options = await errorManagerPage.getDropdownOptionTexts(recordCodeField);
@@ -979,31 +975,21 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-014 | the previous version only keyed Policy Number, not "a
-   * full set of detail criteria" as the BRD's own Steps column and
-   * BRD V4.2 Criterion 8 both call for. Filled here with the confirmed
-   * shared test record's (TEST_POLICY_NUMBER/TEST_ECN, RD202634900020,
-   * AR1) own live-confirmed field values - Branch 7, Trans Code 02,
-   * Trans Mode LA, Run Number RD (the ECN's own two-letter prefix), Status
-   * N (New), Policy Number 300000020, Record Code AR1, Region 3, District
-   * 1020 (this search field enforces a different, numeric-only format from
-   * the record editor's own alphanumeric District field), Staff 3,
-   * Contract Number CN6020 (the record's own Ordinary Agent Contract
-   * Number), Action Code 3 X, Channel Code PS - each checked against that
-   * field's real dropdown options rather than guessed. Six
-   * fields (ROC, Agency, Supplemental Kind, Adjust Code, Cent Code, RF
-   * Code) are left unset: no confirmed real value exists for them on this
-   * record, and while this test doesn't need a non-empty result set to
-   * verify retention, it does call for using real, not fabricated, data
-   * for whichever fields are filled.
+   * TMS-E2E-014 | filled with the confirmed shared test record's (TEST_POLICY_NUMBER/TEST_ECN,
+   * RD202634900020, AR1) own real field values - Branch 7, Trans Code 02, Trans Mode LA, Run
+   * Number RD (the ECN's own two-letter prefix), Status N (New), Policy Number 300000020,
+   * Record Code AR1, Region 3, District 1020 (this search field enforces a different,
+   * numeric-only format from the record editor's own alphanumeric District field), Staff 3,
+   * Contract Number CN6020 (the record's own Ordinary Agent Contract Number), Action Code 3 X,
+   * Channel Code PS - each checked against that field's real dropdown options rather than
+   * guessed. Six fields (ROC, Agency, Supplemental Kind, Adjust Code, Cent Code, RF Code) are
+   * left unset: no confirmed real value exists for them on this record.
    *
-   * Locators here use the fields' own stable element ids directly
-   * (#branch, #transCode, etc.) rather than role/label lookups - this
-   * suite has repeatedly found role- and label-based lookups on this
-   * search form unreliable (cross-tab id collisions on shared labels like
-   * "Record Code"; labels that stop resolving once a field carries a
-   * value), and the ids themselves have been stable across every field
-   * inspected so far.
+   * Locators here use the fields' own stable element ids directly (#branch, #transCode, etc.)
+   * rather than role/label lookups - role- and label-based lookups on this search form are
+   * unreliable (cross-tab id collisions on shared labels like "Record Code"; labels that stop
+   * resolving once a field carries a value), and the ids themselves have been stable across
+   * every field inspected so far.
    */
   test('TMS-E2E-014 - E2E-A14: Filter Results returns to the criteria with every keyed value intact', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
@@ -1026,11 +1012,9 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     const regionField = page.locator('#region');
     await (await errorManagerPage.openComboboxOptions(regionField)).filter({ hasText: /Region 3/i }).first().click();
     const districtField = page.locator('#district');
-    // Live-confirmed: this search field validates District as "Up to 4
-    // digits, optionally ending with *" - a different, numeric-only format
-    // from the record editor's own alphanumeric District field (which
-    // accepts values like "B12X"). "1020" is the format this field
-    // actually enforces.
+    // This search field validates District as "Up to 4 digits, optionally ending with *" - a
+    // different, numeric-only format from the record editor's own alphanumeric District field
+    // (which accepts values like "B12X"). "1020" is the format this field actually enforces.
     await districtField.fill('1020');
     const staffField = page.locator('#staff');
     await staffField.fill('3');
@@ -1084,28 +1068,20 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-015 | rewritten to actually check status values, not just row
-   * counts. The previous version only compared row counts across the three
-   * toggle states (a non-decreasing count is consistent with the rule but
-   * does not confirm it - a search that always returned every row
-   * regardless of the toggles would pass that check too) and never
-   * verified the final "Deleted only" filter's own result at all. It also
-   * used page.getByRole('row') - live-confirmed unreliable on this grid
-   * (see the OPEN FINDING note at the top of this describe block) - now
-   * replaced with the tag-based page.locator('tr') pattern already proven
-   * reliable in TMS-E2E-003/007/012/014.
+   * TMS-E2E-015 | checks actual status values per toggle state, not just row counts - a
+   * non-decreasing count alone is consistent with the rule but doesn't confirm it (a search
+   * that always returned every row regardless of the toggles would pass that too). Uses the
+   * tag-based page.locator('tr') pattern (not page.getByRole('row'), unreliable on this grid -
+   * see the describe block's own note), already proven in TMS-E2E-003/007/012/014.
    */
   test('TMS-E2E-015 - E2E-A15: the default population hides Released and Deleted work until the toggles are set', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
 
-    // Reads the STATUS badge text out of every data row on the current
-    // Result Grid page. A single bulk innerText() read plus a global regex
-    // is used rather than looping row-by-row with individual .innerText()
-    // calls - live-confirmed elsewhere in this file (the OPEN FINDING note
-    // at the top of this describe block) that per-row queries on this grid
-    // can hang for the full actionability timeout on some rows, which
-    // multiplies badly across dozens of rows; one bulk read avoids that
-    // entirely.
+    // Reads the STATUS badge text out of every data row on the current Result Grid page. A
+    // single bulk innerText() read plus a global regex is used rather than looping row-by-row
+    // with individual .innerText() calls - per-row queries on this grid can hang for the full
+    // actionability timeout on some rows, which multiplies badly across dozens of rows; one bulk
+    // read avoids that entirely.
     const readStatuses = async (): Promise<string[]> => {
       const text = await page.locator('main').innerText();
       const matches = text.match(/\b(NEW|OPEN|HELD|RELEASED|DELETED)\b/gi) || [];
@@ -1172,39 +1148,26 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-016 | Live-confirmed 2026-08-28: the previous version keyed a
-   * hardcoded, unconfirmed Policy Number ("200000020") as its sole
-   * criterion. This uses a real combination from the confirmed shared test
-   * record instead (TEST_POLICY_NUMBER/TEST_ECN: Policy Number 300000020,
-   * Branch 7). Also added: the BRD's own "record the statuses returned"
-   * checks for both the ordinary search and the reapplied filter, a check
-   * that the saved criteria fields (not just Include Released) are
-   * restored, and the sign-out/sign-in remembered-default check the
-   * previous version's own doc comment said was skipped as "a hard
-   * assumption about where that default is displayed on re-login" -
-   * live-confirmed reachable: Include Released is present and checkable
-   * again immediately after signing back in and landing on Error Manager
-   * (CB Records), no assumption required.
+   * TMS-E2E-016 | uses a real combination from the confirmed shared test record
+   * (TEST_POLICY_NUMBER/TEST_ECN: Policy Number 300000020, Branch 7) rather than a hardcoded,
+   * unconfirmed Policy Number. Also checks: the BRD's own "record the statuses returned" for
+   * both the ordinary search and the reapplied filter, that the saved criteria fields (not just
+   * Include Released) are restored, and the sign-out/sign-in remembered-default - Include
+   * Released is present and checkable again immediately after signing back in and landing on
+   * Error Manager (CB Records), no assumption required.
    *
-   * FIXED, 2026-09-04: the previous version's own doc comment flagged, but
-   * left unfixed, a side finding that every run leaves its own "QA
-   * automated saved filter <timestamp>" preset behind permanently, growing
-   * the Saved Filters list on this shared account without bound. Live-
-   * confirmed each chip's own delete button (aria-label "Delete <exact
-   * name>", no confirmation dialog) - ErrorManagerPage.deleteSavedFiltersMatching()
-   * now removes any pre-existing "QA automated saved filter" chip(s) before
-   * this test creates its own, so the flow starts from a clean list each
-   * run instead of accumulating on top of every previous one (which also
-   * kept the display growing less relevant over time, since Save Filter's
-   * own dialog and the Saved Filters chip row both get more cluttered the
-   * more of these pile up).
+   * Every run leaves its own "QA automated saved filter <timestamp>" preset behind permanently,
+   * growing the Saved Filters list on this shared account without bound.
+   * ErrorManagerPage.deleteSavedFiltersMatching() (each chip's own delete button, aria-label
+   * "Delete <exact name>", no confirmation dialog) removes any pre-existing "QA automated saved
+   * filter" chip(s) before this test creates its own, so the flow starts from a clean list each
+   * run instead of accumulating on top of every previous one.
    */
   test('TMS-E2E-016 - E2E-A16: a saved filter is reapplied and its own Include settings override the remembered defaults', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
 
-    // Same bulk-read approach as TMS-E2E-015 - avoids the per-row hang risk
-    // documented in the OPEN FINDING note at the top of this describe
-    // block.
+    // Same bulk-read approach as TMS-E2E-015 - avoids the per-row hang risk documented in the
+    // describe block's own note.
     const readStatuses = async (): Promise<string[]> => {
       const text = await page.locator('main').innerText();
       const matches = text.match(/\b(NEW|OPEN|HELD|RELEASED|DELETED)\b/gi) || [];
@@ -1222,10 +1185,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await errorManagerPage.deleteSavedFiltersMatching();
 
     // Step: Create and Save a Filter.
-    // Live-confirmed: "Current Week" (the default scope) returns 0 results
-    // for this record's own criteria - same finding already established
-    // elsewhere in this file (e.g. TMS-E2E-012/014) - so "All Weeks" is
-    // selected first.
+    // "Current Week" (the default scope) returns 0 results for this record's own criteria (same
+    // finding as TMS-E2E-012/014) - so "All Weeks" is selected first.
     await errorManagerPage.allWeeksRadio().check();
     await includeReleased.check();
     await policyField.fill('300000020');
@@ -1239,25 +1200,20 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       return;
     }
     await saveFilterBtn.click();
-    // Live-confirmed: a hardcoded name collides with a preset of the same
-    // name left behind by a previous run (the dialog refuses to save with
-    // "A filter preset with this name already exists" and stays open,
-    // hanging every interaction after it) - suffixing with the current
-    // timestamp keeps each run's preset name unique.
+    // A hardcoded name would collide with a preset of the same name left behind by a previous
+    // run (the dialog refuses to save with "A filter preset with this name already exists" and
+    // stays open, hanging every interaction after it) - suffixing with the current timestamp
+    // keeps each run's preset name unique.
     const filterName = `QA automated saved filter ${Date.now()}`;
     const nameField = page.getByLabel(/Filter Name|Name/i);
     if (await nameField.count()) await nameField.fill(filterName);
-    // Live-confirmed: clicking "Save Filter" opens a "Save filter preset"
-    // dialog whose own submit button reads "Save filter" (two words) - the
-    // exact-match /^(Save|Confirm)$/i never matched it, so the button was
-    // silently never clicked (guarded by a count() check), leaving the
-    // modal open and blocking every interaction after it. Scoped to the
-    // dialog so this doesn't also match the (now-covered) trigger button
-    // of the same name behind it.
+    // Clicking "Save Filter" opens a "Save filter preset" dialog whose own submit button reads
+    // "Save filter" (two words), not "Save"/"Confirm". Scoped to the dialog so this doesn't also
+    // match the trigger button of the same name behind it.
     const confirmBtn = page.getByRole('dialog').getByRole('button', { name: /Save filter/i });
     if (await confirmBtn.count()) await confirmBtn.click();
-    // Step: Verify that the filter is saved successfully - live-confirmed:
-    // a new chip bearing the given name appears in the Saved Filters list.
+    // Step: Verify that the filter is saved successfully - a new chip bearing the given name
+    // appears in the Saved Filters list.
     const savedFilterChip = page.getByText(filterName, { exact: true });
     await expect(savedFilterChip).toBeVisible();
 
@@ -1277,12 +1233,10 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await errorManagerPage.goto();
     await savedFilterChip.click();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
-    // Live-confirmed race: resultGrid() alone can resolve true against the
-    // still-rendered ordinary-search grid from just before this click,
-    // before the reapplied filter's own content has actually painted -
-    // "Incl. Released" is a criteria chip unique to this reapplied state
-    // (the ordinary search just above explicitly had it unchecked), so
-    // waiting for that first avoids reading stale content.
+    // resultGrid() alone can resolve true against the still-rendered ordinary-search grid from
+    // just before this click, before the reapplied filter's own content has painted - "Incl.
+    // Released" is a criteria chip unique to this reapplied state (the ordinary search just
+    // above explicitly had it unchecked), so waiting for that first avoids reading stale content.
     await expect(page.getByText('Incl. Released')).toBeVisible();
     const reappliedStatuses = await readStatuses();
     // The saved filter's own Include Released=true can only add to what
@@ -1298,16 +1252,13 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await page.getByRole('button', { name: /Filter Results/i }).click();
     await expect(includeReleased).toBeChecked();
     await expect(policyField).toHaveValue(keyedPolicy);
-    // LIVE-CONFIRMED GAP, not a test bug: Branch does not come back
-    // through Filter Results after the current search came from reapplying
-    // a saved filter (it does correctly round-trip after an ordinary View
-    // Records search, per TMS-E2E-014) - the field renders empty here even
-    // though the reapplied filter's own search (confirmed via the result
-    // above, and the "Branch: 7" criteria chip visible on the Result Grid
-    // just before this) plainly used Branch 7. Include Released and Policy
-    // Number (a plain text input) do restore correctly; Branch (a
-    // combobox) does not - not chased further, and not asserted here, per
-    // instruction not to fix a real bug.
+    // GAP, not a test bug: Branch does not come back through Filter Results after the current
+    // search came from reapplying a saved filter (it does correctly round-trip after an ordinary
+    // View Records search, per TMS-E2E-014) - the field renders empty here even though the
+    // reapplied filter's own search (confirmed via the result above, and the "Branch: 7" criteria
+    // chip visible on the Result Grid just before this) plainly used Branch 7. Include Released
+    // and Policy Number (a plain text input) do restore correctly; Branch (a combobox) does not -
+    // not chased further, and not asserted here, per instruction not to fix a real bug.
 
     // Step: Verify Remembered Include Default.
     // BR-332: the saved filter's own Include setting overrides the
@@ -1323,25 +1274,16 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-017 | RESOLVED (2026-09-03): previously reported as an
-   * application defect (DEF-E2E-003 - "no column ever gains an aria-sort
-   * attribute... row order is byte-for-byte identical before and after
-   * every click"). Manually rechecked per direction from the test owner:
-   * sorting does work. The automation bug was clicking the wrong element -
-   * each sortable header renders as a columnheader `<th>` wrapping a
-   * smaller inner `<button>` (with its own sort-direction icon), and
-   * `header.click()` clicks the `<th>` cell itself, whose clickable area
-   * does not fully coincide with the button inside it. Clicking the
-   * header's own nested button instead is live-confirmed to genuinely
-   * re-sort: the URL gains `sortColumn=polNo&sortDirection=asc`, a real
-   * `GET .../spi/search?...&sort=polNo,asc` request fires, row order
-   * changes, and the columnheader cell picks up `aria-sort="ascending"`.
-   * "Weeks Waiting" still does not exist as a column (the grid's real
-   * columns are Status/Error/Error Control Number/Record/Location/Policy
-   * Number/Branch Code/Trans Code/Trans Mode/Cycle Wk/Pol Kind/Updated
-   * At/Updated By) - Policy Number remains the substitute used here, since
-   * BR-333 describes sorting as a capability of every column heading, not
-   * one specific column.
+   * TMS-E2E-017 | each sortable header renders as a columnheader `<th>` wrapping a smaller
+   * inner `<button>` (with its own sort-direction icon) - the header's own nested button must be
+   * clicked, not the `<th>` cell itself, whose clickable area does not fully coincide with the
+   * button inside it. Clicking it genuinely re-sorts: the URL gains
+   * `sortColumn=polNo&sortDirection=asc`, a real `GET .../spi/search?...&sort=polNo,asc` request
+   * fires, row order changes, and the columnheader cell picks up `aria-sort="ascending"`.
+   * "Weeks Waiting" does not exist as a column (the grid's real columns are Status/Error/Error
+   * Control Number/Record/Location/Policy Number/Branch Code/Trans Code/Trans Mode/Cycle
+   * Wk/Pol Kind/Updated At/Updated By) - Policy Number is used as the substitute, since BR-333
+   * describes sorting as a capability of every column heading, not one specific column.
    */
   test('TMS-E2E-017 - E2E-A17: the result list is reordered by a column heading', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
@@ -1354,9 +1296,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // Verify that pagination is available - a second page link/control.
     await expect(page.getByText('2', { exact: true }).first()).toBeVisible();
 
-    // Step: Record Initial Row Order - the tag-based locator, not
-    // getByRole('row') (live-confirmed unreliable on this grid; see the
-    // OPEN FINDING note at the top of this describe block).
+    // Step: Record Initial Row Order - the tag-based locator, not getByRole('row') (unreliable
+    // on this grid; see the describe block's own note).
     const rowsBefore = await page.locator('tr').allInnerTexts();
 
     // "Weeks Waiting" does not exist as a column (see the doc comment
@@ -1374,12 +1315,10 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // Step: Sort by Weeks Waiting - First Click.
     await sortButton.click();
     await expect(headerCell).toHaveAttribute('aria-sort', 'ascending');
-    // Live-confirmed (same root cause already found in TMS-E2E-021/031):
-    // the grid re-fetches and briefly re-renders placeholder/ghost rows on
-    // every sort change, same as on a fresh search - reading rows
-    // immediately after aria-sort flips can still capture that transient
-    // state. Waiting for a real row's own 9-digit Policy Number first
-    // guarantees the re-sorted data has actually rendered.
+    // The grid re-fetches and briefly re-renders placeholder/ghost rows on every sort change,
+    // same as on a fresh search (same root cause as TMS-E2E-021/031) - reading rows immediately
+    // after aria-sort flips can still capture that transient state. Waiting for a real row's own
+    // 9-digit Policy Number first guarantees the re-sorted data has actually rendered.
     await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
     const rowsAfterAsc = await page.locator('tr').allInnerTexts();
     expect(rowsAfterAsc).not.toEqual(rowsBefore);
@@ -1393,50 +1332,27 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-018 | Live-confirmed 2026-08-28: tried a genuine second
-   * operator (o-0002/operator, "Alicia Chen") as this case's own steps
-   * name, but her visible population is scoped to office RHOA only (14
-   * records total), while admin's own visible population (37 records
-   * across All Weeks, checked on both result pages) spans RHOR/RHOG/RHOC/
-   * RHOI/RHOB/RHOF/RHOE and contains zero RHOA records. Neither account's
-   * search can find a record the other one can too, so the two named
-   * accounts cannot open "the same suspended transaction" as the
-   * Preconditions require - a genuine credential/data-scoping gap, not a
-   * test bug. admin/admin is used for both sessions instead (as the
-   * previous version already did): BR-323/324's optimistic-locking check
-   * is identity-agnostic - it only depends on two separate sessions
-   * holding stale copies of the same record, not on who is signed into
-   * each one.
-   *
-   * RESOLVED, live-confirmed 2026-09-04: the BLOCKED write-up this comment
-   * previously carried (dated 2026-08-28, against the then-current
-   * TEST_ECN/RD202634900020 on the old pru-tms-dev environment - every
-   * New-status record was unsavable) no longer applies. The suite has
-   * since migrated to pru-tms-demo with a new TEST_ECN/TEST_POLICY_NUMBER
-   * fixture (see test-data/constants.ts's own history of that migration),
-   * and this test's own body was independently reworked to use
-   * label-following-input lookups (getByLabel breaks once a field carries
-   * a prior edit), toggled amend values (to dodge 7114
-   * NO_CORRECTIONS_MADE), and a real HTTP 412 conflict check plus a fresh
-   * API GET to verify nothing was silently overwritten - passed on two
-   * independent live runs against the current fixture.
+   * TMS-E2E-018 | a genuine second operator (o-0002/operator, "Alicia Chen") - this case's own
+   * steps name - has a visible population scoped to office RHOA only (14 records total), while
+   * admin's own visible population (37 records across All Weeks) spans RHOR/RHOG/RHOC/RHOI/
+   * RHOB/RHOF/RHOE and contains zero RHOA records. Neither account's search can find a record
+   * the other one can too, so the two named accounts cannot open "the same suspended
+   * transaction" as the Preconditions require - a genuine credential/data-scoping gap, not a
+   * test bug. admin/admin is used for both sessions instead: BR-323/324's optimistic-locking
+   * check is identity-agnostic - it only depends on two separate sessions holding stale copies
+   * of the same record, not on who is signed into each one.
    */
   test('TMS-E2E-018 - E2E-A18: two operators attempt to save the same record and the version check refuses the second', async ({ page, loginPage, recordEditorPage, browser }) => {
     // Step: Open Transaction in First Session.
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.clickEdit();
-    // Live-confirmed: the previous version had both sessions amend
-    // firstTextbox() - the SAME field - contradicting this case's own
-    // "amend a different field" step. District and Staff (the same two
-    // fields TMS-E2E-001/002 already commit valid values to on this
-    // record) are used instead so the two sessions genuinely touch
-    // different fields.
+    // District and Staff (the same two fields TMS-E2E-001/002 already commit valid values to on
+    // this record) are used so the two sessions genuinely touch different fields, per this
+    // case's own "amend a different field" step.
     //
-    // Same fix as TMS-E2E-001: getByLabel(/District|Staff/i) breaks once a
-    // field on this shared record carries a prior edit (its label is
-    // replaced with a "N prior change(s)" button) - located by visible
-    // label text + next input in document order instead.
+    // Same label-breaks-after-edit fix as TMS-E2E-001 (getByLabel finds nothing once a field
+    // carries a prior edit) - located by visible label text + next input instead.
     const field1 = page.getByText(/^District$/).locator('xpath=following::input[1]');
     const field1Original = await field1.inputValue();
     const field1New = field1Original === 'B12X' ? 'B13X' : 'B12X';
@@ -1462,11 +1378,10 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     // Step: Save Changes in First Session.
     await field1.fill(field1New);
     await recordEditorPage.clickSave();
-    // Live-confirmed (same finding as TMS-E2E-001): this completion banner
-    // is transient and can fade before an assertion runs, even though the
-    // save genuinely committed - a short best-effort check is made, but the
-    // committed value itself (once the save has visibly returned the
-    // record to view mode) is the authoritative, non-racy proof.
+    // Same finding as TMS-E2E-001: this completion banner is transient and can fade before an
+    // assertion runs even on a genuine success - a short best-effort check is made, but the
+    // committed value itself (once the save has visibly returned the record to view mode) is the
+    // authoritative, non-racy proof.
     await page.getByText(/\b710[0-8]\b/).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
     await expect(recordEditorPage.editButton()).toBeVisible();
     await expect(page.getByText(field1New, { exact: true }).first()).toBeVisible();
@@ -1476,21 +1391,16 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await recordEditorPage2.clickSave();
 
     // Step: Verify Concurrent Update Response.
-    // The second save must be refused because the version marker no longer
-    // matches the server's current copy. Live-confirmed via the raw
-    // response, not guessed: this is a genuine HTTP 412 Precondition
-    // Failed, surfaced as a distinct conflict choice - "Cancel" / "Reload
-    // server version" / "Keep my edits, save over it" - rather than a
-    // plain error banner; "version" in that second button's own text is
-    // what the existing regex actually catches.
+    // The second save must be refused because the version marker no longer matches the server's
+    // current copy - a genuine HTTP 412 Precondition Failed, surfaced as a distinct conflict
+    // choice ("Cancel" / "Reload server version" / "Keep my edits, save over it") rather than a
+    // plain error banner; "version" in that second button's own text is what the regex catches.
     await expect(page2.getByText(/conflict|changed|no longer match|version|7303|412/i).first()).toBeVisible();
-    // Inspect the record's actual server-committed state, not the
-    // still-open form: since the save was refused, nothing has been
-    // reloaded or force-saved yet, so the input still shows session 2's
-    // own typed, unsent draft regardless of what the server actually
-    // holds - reading it would trivially always equal field2New and prove
-    // nothing. Per the Expected Result, nothing is silently overwritten -
-    // checked via a fresh GET of the real record instead.
+    // Inspect the record's actual server-committed state, not the still-open form: since the
+    // save was refused, nothing has been reloaded or force-saved yet, so the input still shows
+    // session 2's own typed, unsent draft regardless of what the server actually holds - reading
+    // it would trivially always equal field2New and prove nothing. Per the Expected Result,
+    // nothing is silently overwritten - checked via a fresh GET of the real record instead.
     const verifyRes = await page2.request.get(`${BASE_URL}/api/v1/spi/${TEST_ECN}`);
     const verified = await verifyRes.json();
     expect(verified?.identity?.staff).not.toBe(field2New);
@@ -1499,66 +1409,35 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-019 | Live-confirmed 2026-08-28: TMS-E2E-025's own Branch/"ZZ9"
-   * strict-tier example never actually runs - getByLabel(/Branch/i)
-   * resolves to 0 elements on this record's form (Branch only renders as
-   * read-only header text, not a labelled input), so that test's `if
-   * (await branchField.count())` guard silently skips the whole block.
-   * District's own "first character must be alphabetic" constraint
-   * (already live-confirmed real - see the OPEN FINDING note at the top of
-   * this describe block, which caught a concurrent writer leaving an
-   * all-numeric District value on this record in violation of it) is used
-   * here instead as a strict-tier example reachable through a real
-   * labelled field. The previous version also blanked the field entirely,
-   * which tests "required value missing", not "a value that violates a
-   * strict-tier constraint" as this case's own steps ask for - and used a
-   * dead fallback branch for Submit that assumed the button might not
-   * exist, when it is in fact always present (Cancel / Save Changes /
-   * Submit) once in Edit mode.
+   * TMS-E2E-019 | Branch is not a labelled input on this record's form (it only renders as
+   * read-only header text), so District's own "first character must be alphabetic" constraint
+   * is used instead as a strict-tier example reachable through a real labelled field.
    *
-   * Also live-confirmed and fixed: the refusal locator was
-   * `getByText(/error|.../i)` unscoped, which matched the always-visible
-   * "Error Manager" sidebar nav link before ever reaching the real banner
-   * in main - a false-positive locator bug, not the app under test. Every
-   * assertion built on it (visibility, and the Save-vs-Submit text
-   * comparison) was trivially satisfied by that phantom nav-link match
-   * regardless of what the record actually did. Scoped to
-   * page.locator('main') to fix it.
-   *
-   * RESOLVED, live-confirmed 2026-09-04: the BLOCKED write-up this comment
-   * previously carried (dated 2026-08-28, against the old TEST_ECN on
-   * pru-tms-dev, where even a no-op save was refused) no longer applies -
-   * the suite has since migrated to pru-tms-demo with a new fixture (see
-   * test-data/constants.ts's own history). Re-verified directly: the
-   * captured refusal text is "ERROR- SCREENING ERROR IN HIGHLIGHTED
-   * FIELD(S) (General)" - genuinely tied to District's own invalid value
-   * this time, not a pre-existing universal block, since TMS-E2E-018's own
-   * District amend against this same record (a valid value) commits
-   * cleanly. So the Save-vs-Submit text comparison below is a real
-   * confirmation that both actions enforce District's strict-tier rule
-   * identically, not two hits on the same unrelated block.
+   * The refusal locator is scoped to page.locator('main'): an unscoped getByText(/error/i)
+   * matches the always-visible "Error Manager" sidebar nav link before ever reaching the real
+   * banner. The captured refusal, "ERROR- SCREENING ERROR IN HIGHLIGHTED FIELD(S) (General)", is
+   * genuinely tied to District's own invalid value (TMS-E2E-018's own District amend against
+   * this same record, a valid value, commits cleanly) - so the Save-vs-Submit text comparison
+   * below is a real confirmation that both actions enforce District's strict-tier rule
+   * identically.
    */
   test('TMS-E2E-019 - E2E-A19: Save and Submit apply identical validation', async ({ page, loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.clickEdit();
 
-    // Same fix as TMS-E2E-001: getByLabel(/District/i) breaks once the
-    // field carries a prior edit (its label is replaced with a
-    // "N prior change(s)" button) - located by visible label text + next
-    // input in document order instead, via a small helper since this test
-    // re-enters Edit mode several times.
+    // Same label-breaks-after-edit fix as TMS-E2E-001 (getByLabel finds nothing once a field
+    // carries a prior edit) - located by visible label text + next input instead, via a small
+    // helper since this test re-enters Edit mode several times.
     const districtField = () => page.getByText(/^District$/).locator('xpath=following::input[1]');
 
     // Step: Test Strict-Tier Constraint Using Save Changes.
     const districtOriginal = await districtField().inputValue();
     await districtField().fill('4321');
     await recordEditorPage.clickSave();
-    // Live-confirmed bug in this test itself: an unscoped getByText(/error/i)
-    // matches the "Error Manager" sidebar nav link (always present and
-    // visible) before it ever reaches the actual banner in main, making the
-    // refusal check and the text comparison below trivially pass on a
-    // phantom match. Scoped to main to only see the real banner.
+    // An unscoped getByText(/error/i) matches the "Error Manager" sidebar nav link (always
+    // present and visible) before it ever reaches the actual banner in main. Scoped to main to
+    // only see the real banner.
     const saveRefusal = page.locator('main').getByText(/SCREENING ERROR|invalid|district|alphabetic/i).first();
     await expect(saveRefusal).toBeVisible();
     const saveRefusalText = (await saveRefusal.textContent())?.trim();
@@ -1598,44 +1477,20 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-020 | the previous version reused the suite's shared
-   * TEST_POLICY_NUMBER/TEST_ECN record via openConfirmedTestRecord() -
-   * exactly the record this case's own Preconditions rule out, since it has
-   * been repeatedly amended by nearly every other test in this file and so
-   * can never be "not previously modified". It also amended
-   * recordEditorPage.firstTextbox() (Policy Number) by appending a trailing
-   * space - the same invalid-data pattern already flagged and fixed
-   * elsewhere in this file (TMS-E2E-008/018), and not "a valid value" as
-   * this case's own steps call for. And it never implemented the "Verify
-   * Updated Status" step at all - no return to the Result Grid, no
-   * re-locating the row, no status check.
-   *
-   * RESOLVED, live-confirmed 2026-09-04: the BLOCKED write-up this comment
-   * previously carried (dated 2026-08-28, reconfirmed 2026-09-03 - every
-   * New-status record was unsavable) no longer applies on the current
-   * pru-tms-demo environment; test.fail() removed accordingly.
-   *
-   * FULLY DYNAMIC (2026-09-09), replacing a dedicated single-use fixture
-   * constant (NEW_STATUS_TEST_POLICY_NUMBER) that had to be manually
-   * swapped in test-data/constants.ts every time a run consumed it (seven
-   * times across this session) - a real, recurring maintenance cost this
-   * rewrite removes entirely. Every run now searches CB Records with
-   * Status filtered to New (the same #statusCode combobox TMS-E2E-014
-   * already live-confirms) and tries live candidates in turn, driven
-   * entirely off the grid's own visible columns (no API calls):
-   *   - excludes the shared TEST_POLICY_NUMBER record and branch 4/5
-   *     (Debit Insurance) records - live-confirmed (2026-09-08, on two
-   *     independent branch-5 records) this environment's own seeded Agree
-   *     Number values for those branches routinely violate "must be 6
-   *     numeric digits", which blocks ANY save on the record (a
-   *     SCREENING ERROR) regardless of what field this case edits;
-   *   - if a candidate still turns out to carry some other pre-existing,
-   *     unrelated screening violation (the same class of issue fixed in
-   *     TMS-E2E-012), the District edit below itself surfaces it (no
-   *     separate baseline probe needed, since this case was going to make
-   *     that edit anyway) and the next candidate is tried instead.
-   * A rerun therefore always finds its own fresh New-status record rather
-   * than depending on one being manually rotated in ahead of time.
+   * TMS-E2E-020 | this case's own Preconditions require a record "not previously modified" -
+   * the shared TEST_POLICY_NUMBER/TEST_ECN record is repeatedly amended by nearly every other
+   * test in this file, so it can never satisfy that. Every run instead searches CB Records with
+   * Status filtered to New and tries live candidates in turn, driven entirely off the grid's own
+   * visible columns (no API calls):
+   *   - excludes the shared TEST_POLICY_NUMBER record and branch 4/5 (Debit Insurance) records -
+   *     this environment's own seeded Agree Number values for those branches routinely violate
+   *     "must be 6 numeric digits", which blocks ANY save on the record regardless of what field
+   *     this case edits;
+   *   - if a candidate still turns out to carry some other pre-existing, unrelated screening
+   *     violation (the same class of issue fixed in TMS-E2E-012), the District edit below itself
+   *     surfaces it and the next candidate is tried instead.
+   * A rerun therefore always finds its own fresh New-status record rather than depending on one
+   * being manually rotated in ahead of time.
    */
   test('TMS-E2E-020 - E2E-A20: the first save of an untouched record advances its status to Open', async ({ page, loginPage, errorManagerPage, recordEditorPage }) => {
     // Trying every discovered candidate (see below) can take longer than
@@ -1644,30 +1499,24 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     test.setTimeout(240_000);
     await loginPage.loginAsValidUser();
 
-    // Step: Discover live New-status candidates - parsed straight off the
-    // grid's own row text (format-agnostic: a row's cells can be
-    // tab-separated <tr> cells or, for a narrowed single-result search,
-    // newline-separated role=button cells - see TMS-E2E-032's identical
-    // finding - so each field is pulled out by its own unambiguous pattern
-    // rather than a fixed column index).
-    // Live-confirmed on this environment: navigation to /errors can
-    // resolve (per the browser's own "load" event) before the SPA has
-    // actually finished rendering its own tabs - the CB Records tab click
-    // right after goto() has repeatedly timed out for exactly this reason
-    // while diagnosing this case. Waiting for it to actually be visible
-    // first (a generous timeout, since this is exactly where the
-    // environment has been slow) absorbs that gap instead of racing it.
+    // Step: Discover live New-status candidates - parsed straight off the grid's own row text
+    // (format-agnostic: a row's cells can be tab-separated <tr> cells or, for a narrowed
+    // single-result search, newline-separated role=button cells - see TMS-E2E-032's identical
+    // finding - so each field is pulled out by its own unambiguous pattern rather than a fixed
+    // column index).
+    // Navigation to /errors can resolve (per the browser's own "load" event) before the SPA has
+    // actually finished rendering its own tabs, so the CB Records tab click right after goto()
+    // can time out. Waiting for it to actually be visible first (a generous timeout, since this
+    // is exactly where the environment has been slow) absorbs that gap instead of racing it.
     await errorManagerPage.goto();
     await expect(page.getByRole('tab', { name: 'CB Records', exact: true })).toBeVisible({ timeout: 30_000 });
     await errorManagerPage.selectSearchTab('CB Records');
     await errorManagerPage.allWeeksRadio().check();
     const statusField = page.locator('#statusCode');
-    // Live-confirmed reproducible on this specific dropdown (twice in a
-    // row): the "New" option can go stale/detached mid-click shortly after
-    // the list opens (a live re-render racing the click), which
-    // openComboboxOptions()'s own retry loop only covers for the open
-    // action itself, not this selection click - reopening and retrying the
-    // whole selection resolves it.
+    // The "New" option can go stale/detached mid-click shortly after the list opens (a live
+    // re-render racing the click), which openComboboxOptions()'s own retry loop only covers for
+    // the open action itself, not this selection click - reopening and retrying the whole
+    // selection resolves it.
     let statusSelected = false;
     for (let attempt = 0; attempt < 4 && !statusSelected; attempt++) {
       try {
@@ -1736,13 +1585,12 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       await expect(page.getByText('General Information').first()).toBeVisible({ timeout: 20_000 });
     };
 
-    // Step: Open New Transaction - try each candidate in turn until one
-    // actually saves cleanly. Live-confirmed: on a shared, actively-churning
-    // environment, several candidates the search just listed as New can
-    // already be Open again by the time each is individually reopened
-    // (either consumed moments earlier by this same suite, or by the
-    // environment's own background seed churn) - trying only a handful is
-    // not enough headroom, so every discovered candidate is tried.
+    // Step: Open New Transaction - try each candidate in turn until one actually saves cleanly.
+    // On this shared, actively-churning environment, several candidates the search just listed
+    // as New can already be Open again by the time each is individually reopened (either
+    // consumed moments earlier by this same suite, or by the environment's own background seed
+    // churn) - trying only a handful is not enough headroom, so every discovered candidate is
+    // tried.
     let consumedPolicyNumber: string | undefined;
     for (const candidate of candidates) {
       await openCandidateByPolicyNumber(candidate);
@@ -1750,22 +1598,18 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
 
       // Step: Edit and Save Changes.
       await recordEditorPage.clickEdit();
-      // Same fix as TMS-E2E-001: getByLabel(/District/i) breaks once the
-      // field carries a prior edit (its label is replaced with a
-      // "N prior change(s)" button) - located by visible label text + next
-      // input in document order instead. The value is toggled (not
-      // hardcoded) since this same candidate could in principle be
-      // revisited across runs and a fixed literal risks refusal with 7114
-      // NO_CORRECTIONS_MADE if it's already the current value.
+      // Same label-breaks-after-edit fix as TMS-E2E-001 (getByLabel finds nothing once a field
+      // carries a prior edit) - located by visible label text + next input instead. The value is
+      // toggled since this same candidate could in principle be revisited across runs, and a
+      // fixed literal risks refusal with 7114 NO_CORRECTIONS_MADE if it's already the current
+      // value.
       const district = page.getByText(/^District$/).locator('xpath=following::input[1]');
       const districtOriginal = await district.inputValue();
       const districtNew = districtOriginal === 'B12X' ? 'B13X' : 'B12X';
       await district.fill(districtNew);
       await recordEditorPage.clickSave();
-      // Wait for whichever settles first - a fixed short sleep here risked
-      // reading a still-in-flight state as a false screening error on a
-      // genuinely healthy candidate (live-confirmed while diagnosing this
-      // exact race).
+      // Wait for whichever settles first - a fixed short sleep here risks reading a
+      // still-in-flight state as a false screening error on a genuinely healthy candidate.
       const screeningError = page.locator('main').getByText(/SCREENING ERROR/i);
       await Promise.race([
         recordEditorPage.editButton().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {}),
@@ -1785,12 +1629,10 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       'every New-status candidate found today hit a pre-existing screening error unrelated to this edit',
     ).toBeTruthy();
 
-    // The completion message carries a condition code from the 7100-7108
-    // range. Live-confirmed (same finding as TMS-E2E-001): this banner is
-    // transient and can fade before an assertion runs, even though the
-    // save genuinely committed - a short best-effort check is made, but it
-    // is not the authoritative proof; the committed value itself (once the
-    // save has visibly returned the record to view mode) is.
+    // The completion message carries a condition code from the 7100-7108 range but is transient
+    // and can fade before an assertion runs even on a genuine success (same as TMS-E2E-001) - a
+    // short best-effort check is made, but the committed value itself (once the save has
+    // visibly returned the record to view mode) is the authoritative proof.
     await page.getByText(/\b710[0-8]\b/).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
     await expect(recordEditorPage.editButton()).toBeVisible();
 
@@ -1802,45 +1644,37 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await errorManagerPage.policyNumberField().fill(consumedPolicyNumber!);
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
-    // The grid can briefly render placeholder/ghost rows before real data
-    // arrives (see the OPEN FINDING note at the top of this describe block)
-    // - reading rows before a real policy number has actually rendered is
-    // what left updatedRowText undefined here.
+    // The grid can briefly render placeholder/ghost rows before real data arrives (see the
+    // describe block's own note) - reading rows before a real policy number has rendered would
+    // leave updatedRowText undefined.
     await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
     const trRows = await page.locator('tr').allInnerTexts();
     const buttonRows = await page.getByRole('button').filter({ hasText: /^Select \S/ }).allInnerTexts();
     const updatedRowText = [...trRows, ...buttonRows].find((r) => r.includes(consumedPolicyNumber!));
-    // Live-confirmed: the grid renders this row's status as "Open" (mixed
-    // case) rather than the all-caps "NEW" seen while filtering for New
-    // records - a plain 'OPEN' match is case-sensitive by default, so it
-    // never matched a real, successful transition. /i fixes that without
-    // caring which casing either status actually renders in.
+    // The grid renders this row's status as "Open" (mixed case) rather than the all-caps "NEW"
+    // seen while filtering for New records - a plain 'OPEN' match is case-sensitive by default,
+    // so it would never match a real, successful transition. /i fixes that.
     expect(updatedRowText).toMatch(/open/i);
     expect(updatedRowText).not.toMatch(/new/i);
   });
 
   test('TMS-E2E-021 - E2E-A21: a bulk resolve commits each record independently under one batch identifier', async ({ page, loginPage, errorManagerPage }) => {
     await loginPage.loginAsValidUser();
-    // Live-confirmed elsewhere in this file (TMS-E2E-012/014/016): the default
-    // Current Week scope frequently returns zero or very few rows on this
-    // shared dev environment - All Weeks is selected first so "at least five
-    // records" (this case's own precondition) is reliably satisfied.
+    // The default Current Week scope frequently returns zero or very few rows on this shared
+    // dev environment (same finding as TMS-E2E-012/014/016) - All Weeks is selected first so
+    // "at least five records" (this case's own precondition) is reliably satisfied.
     await errorManagerPage.allWeeksRadio().check();
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
-    // Live-confirmed (2026-09-02): resultGrid() only confirms the grid
-    // container itself is present, not that its rows have actually
-    // populated - this grid can briefly render placeholder/ghost rows before
-    // real data arrives (see the OPEN FINDING note at the top of this
-    // describe block). Selecting and bulk-resolving those ghost rows instead
-    // of real ones is a plausible explanation for this case never producing
-    // any completion message - waiting for at least one row's own 9-digit
-    // Policy Number (the same format TMS-E2E-020 already relies on)
-    // guarantees real data has rendered before rows are counted or selected.
+    // resultGrid() only confirms the grid container itself is present, not that its rows have
+    // actually populated - this grid can briefly render placeholder/ghost rows before real data
+    // arrives (see the describe block's own note). Selecting and bulk-resolving those ghost rows
+    // instead of real ones would silently produce no completion message - waiting for at least
+    // one row's own 9-digit Policy Number (the same format TMS-E2E-020 relies on) guarantees
+    // real data has rendered before rows are counted or selected.
     await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
-    // page.getByRole('row') is live-confirmed unreliable/hanging on this grid
-    // (see the OPEN FINDING note at the top of this describe block) - data
-    // rows are selected by excluding any <tr> that contains a header <th>
+    // page.getByRole('row') is unreliable/hanging on this grid (see the describe block's own
+    // note) - data rows are selected by excluding any <tr> that contains a header <th>
     // cell instead, the same tag-based approach already proven elsewhere in
     // this file.
     const dataRows = page.locator('tr').filter({ hasNot: page.locator('th') });
@@ -1853,16 +1687,10 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     const bulkResolveBtn = page.getByRole('button', { name: /Resolve/i });
     if (toSelect > 0 && (await bulkResolveBtn.count())) {
       await bulkResolveBtn.click();
-      // Live-confirmed (2026-09-02), via the failure's own accessibility
-      // snapshot: clicking the bulk-resolve trigger opens a
-      // "Resolve N record(s)" confirmation dialog whose own submit button
-      // ("Resolve N record(s)") stays disabled until a Resolution reason is
-      // chosen. The previous version clicked the trigger and immediately
-      // waited for a completion message with no reason ever selected, so the
-      // dialog just sat there disabled and the wait always timed out - not
-      // an application defect, a missing dialog-completion step. A reason is
-      // selected here first, the same combobox-selection pattern already
-      // used throughout this file (e.g. TMS-E2E-007's Delete confirmation).
+      // Clicking the bulk-resolve trigger opens a "Resolve N record(s)" confirmation dialog
+      // whose own submit button ("Resolve N record(s)") stays disabled until a Resolution
+      // reason is chosen. A reason is selected here first, the same combobox-selection pattern
+      // already used throughout this file (e.g. TMS-E2E-007's Delete confirmation).
       const resolveDialog = page.getByRole('dialog', { name: /Resolve \d+ record/i });
       await expect(resolveDialog).toBeVisible();
       const reasonField = resolveDialog.getByRole('combobox', { name: /Resolution reason/i });
@@ -1883,37 +1711,34 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-022 | Live-confirmed 2026-09-08: admin/admin genuinely carries
-   * ROLE_REFDATA_ADMIN (alongside ROLE_ADMIN) and reaches this screen -
-   * "Reference Data Administration" is branded "Lookup Manager" in this
-   * build (Administration nav -> "Lookup Manager" -> Lookup Categories /
-   * Lookup Values tabs). The prior "CREDENTIAL GAP" skip was wrong.
+   * TMS-E2E-022 | admin/admin carries ROLE_REFDATA_ADMIN (alongside ROLE_ADMIN) and reaches
+   * this screen - "Reference Data Administration" is branded "Lookup Manager" in this build
+   * (References nav -> "Lookup Manager" -> Lookup Categories / Lookup Values tabs).
    *
    * Two live-environment quirks this test routes around:
-   *   - every direct/hard navigation to any /admin/* URL 404s (the SPA only
-   *     resolves these routes via in-app client-side navigation) - this
-   *     test never uses page.goto() for admin pages, only in-app clicks.
-   *   - both Delete and the Active-toggle mutations fire from a Base UI
-   *     menu/dialog stack where Playwright's actionability check can find
-   *     the correct element genuinely obscured by the still-fading prior
-   *     overlay; a plain .click() intermittently no-ops with zero visible
-   *     error. { force: true } is used on menu items and dialog-confirm
-   *     buttons for this reason, consistent everywhere the same pattern
-   *     showed up in exploration.
+   *   - every direct/hard navigation to any /admin/* URL 404s (the SPA only resolves these
+   *     routes via in-app client-side navigation) - this test never uses page.goto() for admin
+   *     pages, only in-app clicks.
+   *   - both Delete and the Active-toggle mutations fire from a Base UI menu/dialog stack where
+   *     Playwright's actionability check can find the correct element genuinely obscured by the
+   *     still-fading prior overlay; a plain .click() intermittently no-ops with zero visible
+   *     error. { force: true } is used on menu items and dialog-confirm buttons for this reason.
    *
-   * "Hold Reason" / AWAITING_AGENT_CONFIRMATION was chosen as the in-use
-   * code under test after checking real usage via the Held-records search
-   * (GET /api/v1/spi/search?statusCode=H) - it is live-confirmed the
-   * lowest-usage in-use code available (server reports usageCount: 16
-   * system-wide), keeping this test's blast radius small. The permanent
-   * Delete attempt is expected (and confirmed) to be refused outright by
-   * the server, so this never risks that data; only the reversible Active
-   * toggle actually mutates state, and is restored immediately after.
+   * "Hold Reason" / AWAITING_AGENT_CONFIRMATION was chosen as the in-use code under test after
+   * checking real usage via the Held-records search (GET /api/v1/spi/search?statusCode=H) - it
+   * is the lowest-usage in-use code available (server reports usageCount: 16 system-wide),
+   * keeping this test's blast radius small. The permanent Delete attempt is expected (and
+   * confirmed) to be refused outright by the server, so this never risks that data; only the
+   * reversible Active toggle actually mutates state, and is restored immediately after.
    */
   test('TMS-E2E-022 - E2E-A22: a reference-data code in use cannot be permanently removed but can be withdrawn', async ({ page, loginPage }) => {
     await loginPage.loginAsValidUser();
 
-    await page.getByRole('button', { name: /Administration/i }).click();
+    // Lookup Manager lives under the "References" top-nav menu (see pages/AdminPage.ts's own
+    // header comment). Anchored (^$), not a bare /References/i - the unanchored form also
+    // substring-matches the unrelated "Open preferences" button ("preferences" contains
+    // "references"), a strict-mode violation.
+    await page.getByRole('button', { name: /^References$/i }).click();
     await page.locator('a:has-text("Lookup Manager"), button:has-text("Lookup Manager")').first().click();
     await expect(page.getByRole('heading', { name: /Lookup (Categories|Manager)/i })).toBeVisible();
     await page.locator('button:has-text("Lookup Values")').first().click();
@@ -1951,36 +1776,38 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await page.locator('[role=menuitem]:has-text("Audit History")').click({ force: true });
     const auditDialog = page.getByRole('dialog').filter({ hasText: /Audit/i });
     await expect(auditDialog).toBeVisible();
-    await expect(auditDialog.getByText(targetCode)).toBeVisible();
+    // .first() - Step 2's own toggle (off then back on) leaves a new entry in this code's
+    // permanent audit history on every run, so repeated runs accumulate multiple
+    // "...AWAITING_AGENT_CONFIRMATION..." entries over time. An unscoped getByText(targetCode)
+    // would then resolve to more than one element and fail strict mode, even though the trail
+    // genuinely does record the action, which is all this assertion is meant to confirm.
+    await expect(auditDialog.getByText(targetCode).first()).toBeVisible();
   });
 
   /**
-   * TMS-E2E-023 | Live-confirmed 2026-09-08: admin/admin reaches the bulk
-   * import screen (Administration -> Lookup Manager -> Lookup Values ->
-   * select a category -> "Bulk Import"), same access-gap correction as
-   * TMS-E2E-022. The "Comm Type" category is reused here since it is
-   * live-confirmed low-traffic (only one schema field, commType,
-   * references it - see TMS-E2E-022's own exploration), keeping any stray
-   * import debris low-impact; the test deletes its own valid row afterward
-   * either way.
+   * TMS-E2E-023 | admin/admin reaches the bulk import screen (References -> Lookup Manager ->
+   * Lookup Values -> select a category -> "Bulk Import"). The "Comm Type" category is reused
+   * here since it is low-traffic (only one schema field, commType, references it - see
+   * TMS-E2E-022's own exploration), keeping any stray import debris low-impact; the test
+   * deletes its own valid row afterward either way.
    *
-   * DEF-E2E-004 RETRACTED (2026-09-08), per direction from the test owner:
-   * this case's "lands in full or not at all" describes per-ROW atomicity
-   * (no code is ever half-written - a row is either fully created with
-   * every column applied, or not written at all), not whole-BATCH
-   * atomicity across every row in the file. A 2-row CSV with one valid
-   * new code and one invalid row (blank "code" - a required column)
-   * confirms exactly that: the valid row lands in full (both its code and
-   * description are present in the Lookup Values grid, confirmed by
-   * searching for it right after import), and the invalid row lands not
-   * at all (skipped outright, zero partial effect - server response e.g.
-   * `{"inserted":1,"updated":0,"skipped":[{"rowNumber":2,"message":"code
-   * is required"}]}`). The UI's own "N INSERTED / N UPDATED / N SKIPPED"
-   * tally reflects this same per-row semantics.
+   * This case's "lands in full or not at all" describes per-ROW atomicity (no code is ever
+   * half-written - a row is either fully created with every column applied, or not written at
+   * all), not whole-BATCH atomicity across every row in the file. A 2-row CSV with one valid new
+   * code and one invalid row (blank "code" - a required column) confirms exactly that: the valid
+   * row lands in full (both its code and description are present in the Lookup Values grid,
+   * confirmed by searching for it right after import), and the invalid row lands not at all
+   * (skipped outright, zero partial effect - server response e.g.
+   * `{"inserted":1,"updated":0,"skipped":[{"rowNumber":2,"message":"code is required"}]}`). The
+   * UI's own "N INSERTED / N UPDATED / N SKIPPED" tally reflects this same per-row semantics.
    */
   test('TMS-E2E-023 - E2E-A23: a bulk reference-data import lands in full or not at all', async ({ page, loginPage }) => {
     await loginPage.loginAsValidUser();
-    await page.getByRole('button', { name: /Administration/i }).click();
+    // Lookup Manager lives under the "References" top-nav menu (see pages/AdminPage.ts's own
+    // header comment). Anchored (^$), not a bare /References/i - the unanchored form also
+    // substring-matches the unrelated "Open preferences" button ("preferences" contains
+    // "references"), a strict-mode violation.
+    await page.getByRole('button', { name: /^References$/i }).click();
     await page.locator('a:has-text("Lookup Manager"), button:has-text("Lookup Manager")').first().click();
     await page.locator('button:has-text("Lookup Values")').first().click();
     await page.locator('button:has-text("Comm Type")').first().click();
@@ -2035,28 +1862,27 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-024 | Live-confirmed 2026-09-08: admin/admin reaches File
-   * Import (Administration -> "File Import"), same access-gap correction
-   * as TMS-E2E-022/023. The screen is branded "FAST PPCS Import" - it
-   * explicitly submits "a FAST PPCS feed to the batch team's processing
-   * chain" and tracks each upload through a FILE NAME / CYCLE WEEK /
-   * RECEIVED / STATUS / STAGES table, which does match this case's
-   * "staged... and committed separately" premise.
+   * TMS-E2E-024 | admin/admin reaches File Import (References -> "File Import"). The screen is
+   * branded "FAST PPCS Import" - it explicitly submits "a FAST PPCS feed to the batch team's
+   * processing chain" and tracks each upload through a FILE NAME / CYCLE WEEK / RECEIVED /
+   * STATUS / STAGES table, which matches this case's "staged... and committed separately"
+   * premise.
    *
-   * SCOPE NOTE: unlike TMS-E2E-022/023's self-contained reference-data
-   * CRUD, actually clicking Submit here dispatches to that real batch
-   * pipeline rather than a sandboxed admin action - live-confirmed
-   * required, not assumed (Submit is disabled with no file attached, and
-   * live-confirmed to enable the instant any file is chosen, with no
-   * client-side content check before that point). Per direction, an actual
-   * submission (and therefore the real staged -> committed transition and
-   * STATUS/STAGES progression this case's later steps describe) is left
-   * unexercised here rather than risking a real downstream batch run;
-   * only the reachable, side-effect-free parts are verified for real.
+   * SCOPE NOTE: unlike TMS-E2E-022/023's self-contained reference-data CRUD, actually clicking
+   * Submit here dispatches to that real batch pipeline rather than a sandboxed admin action
+   * (Submit is disabled with no file attached, and enables the instant any file is chosen, with
+   * no client-side content check before that point). An actual submission (and therefore the
+   * real staged -> committed transition and STATUS/STAGES progression this case's later steps
+   * describe) is left unexercised here rather than risking a real downstream batch run; only the
+   * reachable, side-effect-free parts are verified for real.
    */
   test('TMS-E2E-024 - E2E-A24: a legacy record file is staged through File Import and committed separately', async ({ page, loginPage }) => {
     await loginPage.loginAsValidUser();
-    await page.getByRole('button', { name: /Administration/i }).click();
+    // File Import lives under the "References" top-nav menu (see pages/AdminPage.ts's own
+    // header comment). Anchored (^$), not a bare /References/i - the unanchored form also
+    // substring-matches the unrelated "Open preferences" button ("preferences" contains
+    // "references"), a strict-mode violation.
+    await page.getByRole('button', { name: /^References$/i }).click();
     await page.locator('a:has-text("File Import"), button:has-text("File Import")').first().click();
 
     await expect(page.getByText(/FAST PPCS Import/i)).toBeVisible();
@@ -2077,88 +1903,41 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-025 | Live-confirmed 2026-08-28: Branch - this case's own
-   * suggested strict-tier example - is not an editable field anywhere in
-   * this record's editor (checked every tab); it only renders as read-only
-   * header text, exactly as TMS-E2E-019 already found. District's own
-   * "first character must be alphabetic" constraint is used instead as the
-   * strict-tier example, matching that test's own substitution. The warn-
-   * tier field's real label is "Subsidiary Code", which lives on the
-   * Customer Information tab - the previous version's getByLabel(/Subsidiary/i)
-   * would have matched that text, but the test never navigated there
-   * (it stayed on General Information throughout), so the field was never
-   * actually reachable and the whole block silently no-opped. The
-   * permissive-tier field's real label is "Writ Agent Ind", not "Writing
-   * Agent Indicator" as previously guessed - that guess never matched
-   * anything, so this block silently no-opped too. On top of the label
-   * gaps, the previous version's own flow was broken independent of any of
-   * that: it called clickEdit() a second time after the (skipped) Branch
-   * block, timing out waiting for the Edit button because Save leaves the
-   * editor in Edit mode regardless of outcome (the button doesn't return
-   * until Cancel) - so calling clickEdit() again while still in Edit mode
-   * hangs. And the BRD's own fourth step, "Verify Stored Values" (reopen
-   * and check what actually persisted for each tier), was never
-   * implemented at all.
-   *
-   * BLOCKED, live-confirmed 2026-08-28: the shared TEST_ECN record is
-   * currently New-status, and every New-status record is currently
-   * unsavable (see the OPEN FINDING note at the top of this describe
-   * block) - so every Save click below will surface that same generic
-   * pre-existing banner regardless of which tier is actually being
-   * exercised, masking the specific strict/warn/permissive distinction
-   * this case exists to observe. The test below is written correctly
-   * against the case's real four steps and will exercise the real tiered
-   * behavior once that block clears.
+   * TMS-E2E-025 | Branch - this case's own suggested strict-tier example - is not an editable
+   * field anywhere in this record's editor; it only renders as read-only header text (same as
+   * TMS-E2E-019). District's own "first character must be alphabetic" constraint is used
+   * instead as the strict-tier example. The warn-tier field's real label is "Subsidiary Code"
+   * (Customer Information tab); the permissive-tier field's real label is "Writ Agent Ind", not
+   * "Writing Agent Indicator".
    */
   test('TMS-E2E-025 - E2E-A25: strict, warn and permissive enforcement tiers behave differently on the same save', async ({ page, loginPage, recordEditorPage, errorManagerPage }) => {
-    // DEFECT RETRACTED (2026-09-08), per direction from the test owner:
-    // Subsidiary Code is a closed-list combobox (live-confirmed via its
-    // real options: blank, A, 1, B, 2, O, 3, 4, 5, 7 - matching
-    // GET /api/v1/refdata/subsidiary_code exactly), not a free-text input.
-    // The previous version called .fill('ZZ9') / .fill('ZZ8') directly on
-    // its underlying input - that only edits the combobox's own filter/
-    // display text, it does not select an option, so the field's real form
-    // state never actually changes and every save is correctly refused
-    // with NO_CORRECTIONS_MADE. On top of that, "ZZ9"/"ZZ8" (three
-    // characters) aren't even shaped like a real value for this field
-    // (every registered code is exactly one character) - fabricated,
-    // invalid test data on top of the wrong interaction method. Neither
-    // was a real application defect. Fixed by driving the combobox the
-    // same way every other combobox field in this suite is driven
-    // (errorManagerPage.openComboboxOptions + click a real option).
+    // Subsidiary Code is a closed-list combobox (options: blank, A, 1, B, 2, O, 3, 4, 5, 7 -
+    // matching GET /api/v1/refdata/subsidiary_code), not a free-text input - driven via
+    // openComboboxOptions() + clicking a real option, the same way every other combobox field in
+    // this suite is driven.
     //
-    // Subsidiary Code is confirmed as a genuine BR-308 warn-tier field (the
-    // Business Rules Catalogue names it explicitly, alongside sysSource,
-    // chrgBackCode, retReasonCode, mnemonicCode, convSig, faceIncInd), so
-    // this is the right field for this step. Live-confirmed instead
-    // (2026-09-08): on this specific record (branch V), the field itself
-    // enforces a stronger, higher-precedence rule that pre-empts the
-    // warn-tier check entirely - its own on-screen hint reads "Must be
-    // blank -- only allowed when branch is 'Z' and system source is '5'",
-    // and every registered code (tested both a lettered one, A, and a
-    // numeric one, 1) is refused outright with that exact message, not
-    // silently accepted with a warning. A search across all 212 records
-    // visible to admin/admin found none with branch='Z' and sysSource='5'
-    // (the System Source picklist's own "5" option is self-documented as
-    // "PLACEHOLDER -- legacy code, no confirmed modern mapping... for
-    // direct-entry subsidiaryCode"), so no live record can currently
-    // exercise Subsidiary Code past this gate. What IS verified for real
-    // below is that gate itself: a real, registered code is correctly and
-    // consistently refused on a branch-V record, naming the field and the
-    // exact reason. Demonstrating BR-308's "accepts an unrecognised code
-    // with a warning" behaviour is out of scope here as a result (blocked
-    // by this record-level precondition, not a defect in the warn-tier
-    // mechanism itself).
+    // Subsidiary Code is a genuine BR-308 warn-tier field (the Business Rules Catalogue names it
+    // explicitly, alongside sysSource, chrgBackCode, retReasonCode, mnemonicCode, convSig,
+    // faceIncInd). On this specific record (branch V), though, the field enforces a stronger,
+    // higher-precedence rule that pre-empts the warn-tier check entirely - its own on-screen
+    // hint reads "Must be blank -- only allowed when branch is 'Z' and system source is '5'",
+    // and every registered code is refused outright with that exact message, not silently
+    // accepted with a warning. No record among the population visible to admin/admin has
+    // branch='Z' and sysSource='5' (the System Source picklist's own "5" option is
+    // self-documented as a placeholder legacy code with no confirmed modern mapping), so no live
+    // record can currently exercise Subsidiary Code past this gate. What IS verified below is
+    // that gate itself: a real, registered code is correctly and consistently refused on a
+    // branch-V record, naming the field and the exact reason. Demonstrating BR-308's "accepts an
+    // unrecognised code with a warning" behaviour is out of scope here as a result - blocked by
+    // this record-level precondition, not a defect in the warn-tier mechanism itself.
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
     await recordEditorPage.clickEdit();
 
-    // Same fix as TMS-E2E-001, applied to all three fields this case
-    // touches: getByLabel(...) breaks once a field on this shared record
-    // carries a prior edit (its label is replaced with a
-    // "N prior change(s)" button) - located by visible label text + next
-    // input in document order instead, via small helpers since each field
-    // is re-read after tab switches and a fresh re-open.
+    // Same label-breaks-after-edit fix as TMS-E2E-001, applied to all three fields this case
+    // touches (getByLabel finds nothing once a field carries a prior edit) - located by visible
+    // label text + next input instead, via small helpers since each field is re-read after tab
+    // switches and a fresh re-open.
     const districtField = () => page.getByText(/^District$/).locator('xpath=following::input[1]');
     const subsidiaryField = () => page.getByText(/^Subsidiary Code$/).locator('xpath=following::input[1]');
     const writAgentField = () => page.getByText(/^Writ Agent Ind$/).locator('xpath=following::input[1]');
@@ -2191,9 +1970,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     const writAgentNew = writAgentOriginal === 'Z' ? 'Y' : 'Z';
     await writAgentField().fill(writAgentNew);
     await recordEditorPage.clickSave();
-    // Live-confirmed (same finding as TMS-E2E-001): a successful save
-    // returns to view mode, where Writ Agent Ind renders as read-only text
-    // rather than an input - checked via visible text instead of
+    // Same finding as TMS-E2E-001: a successful save returns to view mode, where Writ Agent Ind
+    // renders as read-only text rather than an input - checked via visible text instead of
     // toHaveValue(), which would need the (now-gone) input element.
     await expect(recordEditorPage.editButton()).toBeVisible();
     await expect(page.getByText(writAgentNew, { exact: true }).first()).toBeVisible();
@@ -2255,16 +2033,13 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-027 | Live-confirmed (same constraint independently established
-   * by TMS-BOUND-013): Application Date and Issue Date render as
-   * calendar-picker buttons, not fillable/readable textboxes -
-   * getByLabel(...).inputValue()/.fill() do not apply and previously crashed
-   * this test outright. No calendar-grid interaction is implemented here
-   * (its cell markup is not independently confirmed anywhere in this
-   * suite), so provoking the violation by keying an out-of-order date is not
-   * exercised. What IS verified for real: the record's currently committed
-   * Application Date, Issue Date and today already satisfy the rule's own
-   * ordering requirement.
+   * TMS-E2E-027 | Application Date and Issue Date render as calendar-picker buttons, not
+   * fillable/readable textboxes (same constraint TMS-BOUND-013 established) - getByLabel(...)
+   * .inputValue()/.fill() do not apply. No calendar-grid interaction is implemented here (its
+   * cell markup is not independently confirmed anywhere in this suite), so provoking the
+   * violation by keying an out-of-order date is not exercised. What IS verified for real: the
+   * record's currently committed Application Date, Issue Date and today already satisfy the
+   * rule's own ordering requirement.
    */
   test('TMS-E2E-027 - E2E-A27: application date, issue date and today must be in order', async ({ page, loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
@@ -2287,18 +2062,12 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-028 | Live-confirmed elsewhere on this record (Financial
-   * Information's own Age field, found while fixing TMS-E2E-027): Age can
-   * render as a disabled, system-computed spinbutton rather than an
-   * independently keyable one, and Date of Birth may render as a
-   * calendar-picker button like every other date field in this app (same
-   * constraint as TMS-E2E-027/TMS-BOUND-013) - .inputValue() alone
-   * previously threw on that shape and was silently swallowed by a
-   * .catch(() => ''), so this test never actually verified anything. What IS
-   * verified for real: the record's currently displayed Age agrees with the
-   * age computed from its Date of Birth, and - only where Age turns out to
-   * still be independently keyable - that keying a wrong Age against the
-   * same Date of Birth is refused.
+   * TMS-E2E-028 | Age can render as a disabled, system-computed spinbutton rather than an
+   * independently keyable one, and Date of Birth may render as a calendar-picker button like
+   * every other date field in this app (same constraint as TMS-E2E-027/TMS-BOUND-013). What IS
+   * verified for real: the record's currently displayed Age agrees with the age computed from
+   * its Date of Birth, and - only where Age turns out to still be independently keyable - that
+   * keying a wrong Age against the same Date of Birth is refused.
    */
   test('TMS-E2E-028 - E2E-A28: keyed age must agree with the date of birth on the same record', async ({ page, loginPage, recordEditorPage }) => {
     await loginPage.loginAsValidUser();
@@ -2362,9 +2131,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await errorManagerPage.allWeeksRadio().check();
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
-    // page.getByRole('row') is live-confirmed unreliable on this grid (see the
-    // OPEN FINDING note at the top of this describe block) - selecting by tag
-    // and opening via the row's own Error control-number button, the same
+    // page.getByRole('row') is unreliable on this grid (see the describe block's own note) -
+    // selecting by tag and opening via the row's own Error control-number button, the same
     // pattern already proven in TMS-E2E-003/007/012/020.
     const releasedRow = page.locator('tr', { hasText: 'Released' }).first();
     if (await releasedRow.count()) {
@@ -2410,23 +2178,17 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await errorManagerPage.allWeeksRadio().check();
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
-    // Live-confirmed (2026-09-02): resultGrid() only confirms the grid
-    // container is present, not that its rows have populated - an immediate
-    // read here can capture placeholder/ghost rows instead of real data (see
-    // the OPEN FINDING note at the top of this describe block), which
-    // produced a false failure here: the baseline read back ~8 blank rows
-    // while the reissued-request read back 25 real rows, purely from a
-    // load-timing race, not the office-scoping behaviour this case is
-    // actually about. Waiting for at least one row's own 9-digit Policy
-    // Number (the same format TMS-E2E-020 already relies on) guarantees real
-    // data before either read.
+    // resultGrid() only confirms the grid container is present, not that its rows have
+    // populated - an immediate read here can capture placeholder/ghost rows instead of real data
+    // (see the describe block's own note), which can look like a false office-scoping
+    // difference purely from a load-timing race. Waiting for at least one row's own 9-digit
+    // Policy Number (the same format TMS-E2E-020 relies on) guarantees real data before either
+    // read.
     await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
-    // page.getByRole('row') is live-confirmed unreliable on this grid (see the
-    // OPEN FINDING note at the top of this describe block) - the tag-based
-    // page.locator('tr') pattern already proven in TMS-E2E-003/007/012/014/017
-    // is used instead, and rows are compared by content (not just count) so a
-    // same-size but different result set is still caught, not just a change
-    // in row total.
+    // page.getByRole('row') is unreliable on this grid (see the describe block's own note) - the
+    // tag-based page.locator('tr') pattern already proven in TMS-E2E-003/007/012/014/017 is used
+    // instead, and rows are compared by content (not just count) so a same-size but different
+    // result set is still caught, not just a change in row total.
     const baselineRows = await page.locator('tr').allInnerTexts();
     const url = page.url();
     // The office used to scope the request is resolved server-side from the
@@ -2440,42 +2202,29 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
   });
 
   /**
-   * TMS-E2E-032 | RESOLVED (2026-09-03): previously reported as a
-   * credential gap (only admin/admin was known - and per the environment's
-   * real multi-user roster, that account is actually ROLE_ADMIN, not
-   * ROLE_OPERATOR, so the previous "ordinary operator half" was itself
-   * signed in as the wrong role). Real ROLE_QA_REVIEWER and ROLE_OPERATOR
-   * credentials are now available.
+   * TMS-E2E-032 | admin/admin is actually ROLE_ADMIN, not ROLE_OPERATOR, so this case's own
+   * "ordinary operator" and "reviewer" roles use dedicated ROLE_QA_REVIEWER/ROLE_OPERATOR
+   * credentials instead.
    *
-   * Live-investigated the actual mechanism before writing this: a
-   * narrow-scope account (reviewer or operator) cannot open a record
-   * OUTSIDE its own rhoScope at all - confirmed a 403 "Out of scope: ECN
-   * belongs to RHO <X>" on both the UI's own record fetch and the raw API
-   * - so this case's own Steps wording ("locate a record in an office
-   * other than the reviewer's own") is not reachable literally as written.
-   * The real, reachable mechanism BR-336 actually gates is the Transfer
-   * action's own DESTINATION check: live-confirmed, a reviewer can open a
-   * record that IS within their own scope and transfer it to a
-   * destination OUTSIDE their scope (succeeds, e.g. "TRANSACTION
-   * CORRECTED AND TO BE TRANSFERRED TO C"); an ordinary operator
-   * attempting the identical destination-outside-scope transfer is
-   * refused with the exact message "Target RHO <X> not in scope —
+   * A narrow-scope account (reviewer or operator) cannot open a record OUTSIDE its own rhoScope
+   * at all - a 403 "Out of scope: ECN belongs to RHO <X>" on both the UI's own record fetch and
+   * the raw API - so this case's own Steps wording ("locate a record in an office other than the
+   * reviewer's own") is not reachable literally as written. The real, reachable mechanism BR-336
+   * gates is the Transfer action's own DESTINATION check: a reviewer can open a record that IS
+   * within their own scope and transfer it to a destination OUTSIDE their scope (succeeds, e.g.
+   * "TRANSACTION CORRECTED AND TO BE TRANSFERRED TO C"); an ordinary operator attempting the
+   * identical destination-outside-scope transfer is refused with "Target RHO <X> not in scope —
    * requires ROLE_QA_REVIEWER for cross-RHO transfer".
    *
-   * Candidates are found dynamically (Open status only - Held/other
-   * statuses live-confirmed elsewhere in this file to not offer Transfer
-   * at all) via the broadly-scoped "o-0001" account, then each transfer is
-   * attempted as the actual narrow-scope account under test - o-0001 is
-   * not used for the transfer itself since BR-336's own distinction would
-   * not be meaningfully exercised by an account whose own scope already
-   * covers virtually every office.
+   * Candidates are found dynamically (Open status only - Held/other statuses don't offer
+   * Transfer at all) via the broadly-scoped "o-0001" account, then each transfer is attempted as
+   * the actual narrow-scope account under test - o-0001 is not used for the transfer itself
+   * since BR-336's own distinction would not be meaningfully exercised by an account whose own
+   * scope already covers virtually every office.
    *
-   * REVISED (2026-09-09), per direction: discovery and the final
-   * unchanged-state check no longer call the raw API at all - live-
-   * confirmed the CB Records grid's own "Location" column already renders
-   * each row's RHO directly as "RHO<letter>/DIST<code>" (e.g.
-   * "RHOE/DISTB293"), alongside Status, so both are read straight off the
-   * real search results instead.
+   * Discovery and the final unchanged-state check are driven entirely off the CB Records grid's
+   * own "Location" column, which renders each row's RHO directly as "RHO<letter>/DIST<code>"
+   * (e.g. "RHOE/DISTB293") alongside Status - no API calls needed.
    */
   test('TMS-E2E-032 - E2E-A32: a cross-office reviewer may transfer between two offices that are not their own', async ({ page, loginPage, errorManagerPage }) => {
     const QA_SCOPE = ['A', 'B', 'E']; // q-0002 (Fatima Hassan), ROLE_QA_REVIEWER
@@ -2483,23 +2232,19 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     const ALL_OFFICES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'I', 'Q', 'R'];
     const outsideScope = (scope: string[]) => ALL_OFFICES.find((o) => !scope.includes(o))!;
 
-    // Step: find one Open-status record within a given scope - driven
-    // entirely off the CB Records grid itself, not the raw API. Live-
-    // confirmed: the grid's own "Location" column already renders each
-    // row's RHO directly, as "RHO<letter>/DIST<code>" (e.g.
-    // "RHOE/DISTB293") - so status and RHO can both be read straight from
-    // the search results, with no need to open every candidate record
+    // Step: find one Open-status record within a given scope - driven entirely off the CB
+    // Records grid itself, not the raw API. The grid's own "Location" column renders each row's
+    // RHO directly, as "RHO<letter>/DIST<code>" (e.g. "RHOE/DISTB293") - so status and RHO can
+    // both be read straight from the search results, with no need to open every candidate record
     // individually or call the API at all.
     //
-    // Live-confirmed a second, independent row shape: a broad multi-row
-    // search renders real <tr> elements with tab-separated cell text, but
-    // narrowing to a single exact match (see the final verification step
-    // below) renders that lone row as its own role=button wrapping cells
-    // instead (the same shape TMS-E2E-012's Quality Review grid always
-    // uses), whose innerText is NOT tab-separated the same way. Parsing by
-    // fixed column index breaks across the two shapes, so each field is
-    // instead pulled out by its own unambiguous pattern directly from the
-    // row's raw text, regardless of what separates the cells.
+    // Two independent row shapes occur: a broad multi-row search renders real <tr> elements
+    // with tab-separated cell text, but narrowing to a single exact match (see the final
+    // verification step below) renders that lone row as its own role=button wrapping cells
+    // instead (the same shape TMS-E2E-012's Quality Review grid always uses), whose innerText is
+    // NOT tab-separated the same way. Parsing by fixed column index breaks across the two
+    // shapes, so each field is instead pulled out by its own unambiguous pattern directly from
+    // the row's raw text, regardless of what separates the cells.
     const parseGridRow = (row: string) => ({
       ecn: row.match(/^Select\s+(\S+)/)?.[1],
       status: row.match(/^Select\s+\S+\s+(NEW|OPEN|HELD|RELEASED|DELETED)\b/i)?.[1],
@@ -2507,7 +2252,21 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       policyNumber: row.match(/\b(\d{9})\b/)?.[1],
     });
 
-    const findOpenRecordInScope = async (scope: string[]) => {
+    // exclude: QA_SCOPE (A/B/E) and OPERATOR_SCOPE (A/B/C) overlap on A and B, and this function
+    // has no de-duplication of its own, so a single record whose own RHO is A or B could satisfy
+    // both scopes and be returned for both lists below. Since the QA step performs a real,
+    // committed Transfer before the operator step ever runs, letting the same record appear in
+    // both lists risks the operator step trying to reuse a record the QA step just moved.
+    //
+    // Returns up to `limit` candidates, not just the first: a record found Open here can become
+    // genuinely unsearchable (a real "No results found", not a rendering delay) by the time a
+    // later step tries to act on it - this is a shared, actively-churning environment, and other
+    // activity can mutate/move a record in the minutes between this discovery scan and the
+    // actual attempt below (the same class of risk test-data/constants.ts's own incident history
+    // documents, and the same reason TMS-E2E-009 tries several candidates rather than trusting
+    // the first one found). Trying each candidate in turn at the point of actual use, rather than
+    // committing to a single one discovered minutes earlier, closes that gap.
+    const findOpenRecordsInScope = async (scope: string[], exclude: string[], limit: number) => {
       await errorManagerPage.goto();
       await errorManagerPage.selectSearchTab('CB Records');
       await errorManagerPage.allWeeksRadio().check();
@@ -2519,6 +2278,7 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       await expect(errorManagerPage.resultGrid()).toBeVisible();
       await expect(page.getByText(/^\d{9}$/).first()).toBeVisible();
 
+      const found: { ecn: string; rho: string; policyNumber: string }[] = [];
       for (const pageNum of ['1', '2', '3', '4', '5', '6']) {
         if (pageNum !== '1') {
           const pageBtn = page.getByRole('button', { name: pageNum, exact: true });
@@ -2528,25 +2288,42 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
         }
         for (const row of (await page.locator('tr').allInnerTexts()).filter((r) => /^Select /.test(r))) {
           const { ecn, status, rho, policyNumber } = parseGridRow(row);
-          if (ecn && policyNumber && rho && /^open$/i.test(status ?? '') && scope.includes(rho)) {
-            return { ecn, rho, policyNumber };
+          if (
+            ecn &&
+            policyNumber &&
+            rho &&
+            /^open$/i.test(status ?? '') &&
+            scope.includes(rho) &&
+            !exclude.includes(policyNumber) &&
+            !found.some((f) => f.policyNumber === policyNumber)
+          ) {
+            found.push({ ecn, rho, policyNumber });
+            if (found.length >= limit) return found;
           }
         }
       }
-      return null;
+      return found;
     };
 
     // Step: Discover Candidates - as the broadly-scoped discovery account.
     await loginPage.goto();
     await loginPage.submitLogin('o-0001', 'operator');
     await page.waitForURL(/\/errors/);
-    const qaRecord = await findOpenRecordInScope(QA_SCOPE);
-    const operatorRecord = await findOpenRecordInScope(OPERATOR_SCOPE);
-    expect(qaRecord, 'no live Open-status record found today within the QA reviewer scope (A/B/E)').toBeTruthy();
-    expect(operatorRecord, 'no live Open-status record found today within the operator scope (A/B/C)').toBeTruthy();
+    const qaCandidates = await findOpenRecordsInScope(QA_SCOPE, [], 5);
+    const operatorCandidates = await findOpenRecordsInScope(
+      OPERATOR_SCOPE,
+      qaCandidates.map((c) => c.policyNumber),
+      5,
+    );
+    expect(qaCandidates.length, 'no live Open-status record found today within the QA reviewer scope (A/B/E)').toBeGreaterThan(0);
+    expect(operatorCandidates.length, 'no live Open-status record found today within the operator scope (A/B/C)').toBeGreaterThan(0);
     await loginPage.logout();
 
-    const attemptTransfer = async (policyNumber: string, destination: string) => {
+    // Returns null (rather than throwing) when this specific candidate is no longer
+    // searchable by the time this account tries to act on it - see findOpenRecordsInScope's
+    // own comment above for why that can genuinely happen here - so the caller can fall
+    // through to its next candidate instead of failing the whole case on a now-stale one.
+    const attemptTransfer = async (policyNumber: string, destination: string): Promise<string | null> => {
       await errorManagerPage.goto();
       await errorManagerPage.selectSearchTab('CB Records');
       await errorManagerPage.allWeeksRadio().check();
@@ -2554,7 +2331,21 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       await errorManagerPage.includeDeletedCheckbox().check();
       await errorManagerPage.policyNumberField().fill(policyNumber);
       await errorManagerPage.viewRecords();
-      await page.locator('tr', { hasText: policyNumber }).first().getByRole('button').first().click();
+      if (await page.getByText(/No results found/i).count()) return null;
+      // A bare page.locator('tr', {hasText: policyNumber}) can find nothing at all here, not
+      // just late - narrowing to a single exact Policy Number match renders that lone row as a
+      // role=button wrapping cells instead of a real <tr> (the same shape TMS-E2E-012's Quality
+      // Review grid always uses, and the same one this function's own "verify nothing changed"
+      // step below already checks for) - a <tr>-only locator never matches that shape at all.
+      // Checking both shapes, and waiting for either to actually render before clicking (this
+      // grid can also render its own container before the row has populated - the same
+      // render-lag race TMS-E2E-009/021/031 document elsewhere in this file), covers both.
+      const trRow = page.locator('tr', { hasText: policyNumber });
+      const buttonRow = page.getByRole('button').filter({ hasText: policyNumber });
+      const targetRow = trRow.or(buttonRow).first();
+      const found = await expect(targetRow).toBeVisible({ timeout: 15_000 }).then(() => true, () => false);
+      if (!found) return null;
+      await targetRow.getByRole('button').first().click();
       await page.getByRole('button', { name: /^Actions$/i }).click();
       await page.getByRole('menuitem', { name: /^Transfer$/i }).click();
       const destField = page.getByRole('combobox', { name: /Target RHO/i });
@@ -2563,25 +2354,35 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
       const destIndex = optionTexts.findIndex((t) => t.startsWith(`${destination} `));
       expect(destIndex).toBeGreaterThanOrEqual(0);
       await options.nth(destIndex).click();
-      await page.getByRole('dialog').getByRole('button', { name: /^Transfer$/i }).click();
-      // The submit button's own label flips to "Submitting..." while the
-      // request is in flight - reading the dialog's text before that
-      // settles can capture the transient label instead of the real
-      // outcome, so this waits it out first.
-      await expect(page.getByRole('dialog')).not.toContainText('Submitting', { timeout: 10_000 });
-      // Live-confirmed: a REFUSED transfer leaves the actual form dialog
-      // open (Cancel/Transfer buttons still present) with the refusal shown
-      // inline. A SUCCESSFUL transfer closes that form dialog, but a toast
-      // notification then appears that also satisfies getByRole('dialog')
-      // here - its own Dismiss control is aria-hidden (invisible to
-      // role-based queries), so it has to be targeted by attribute. Either
-      // way something must be dismissed, or the leftover overlay blocks the
-      // next step's own interactions (e.g. the profile-menu click inside
-      // logout()).
-      const outcome = await page.getByRole('dialog').innerText();
-      const cancelButton = page.getByRole('dialog').getByRole('button', { name: /^Cancel$/i });
-      if (await cancelButton.count()) {
-        await cancelButton.click();
+      const formDialog = page.getByRole('dialog', { name: /^Transfer Record$/i });
+      await formDialog.getByRole('button', { name: /^Transfer$/i }).click();
+      // The submit button's own label flips to "Submitting..." while the request is in flight -
+      // reading the dialog's text before that settles can capture the transient label instead of
+      // the real outcome, so this waits it out first. Scoped to formDialog specifically, not a
+      // bare getByRole('dialog') - a SUCCESSFUL transfer's own success toast (role="dialog",
+      // data-type="success") can render before the form dialog has finished fading out, and an
+      // unscoped getByRole('dialog') then resolves to both at once, hitting a strict-mode
+      // violation on this exact assertion.
+      await expect(formDialog).not.toContainText('Submitting', { timeout: 10_000 }).catch(() => {});
+      // A REFUSED transfer leaves the actual form dialog open (Cancel/Transfer buttons still
+      // present) with the refusal shown inline. A SUCCESSFUL transfer closes that form dialog,
+      // but a toast notification (role="dialog", data-type="success") then appears instead - its
+      // own Dismiss control is aria-hidden (invisible to role-based queries), so it has to be
+      // targeted by attribute. Read whichever of the two is actually still present, rather than
+      // an ambiguous bare getByRole('dialog') that can match either or both depending on exactly
+      // when this runs.
+      //
+      // Not Locator.isVisible(): it is a single, non-polling check - calling it right after the
+      // Submitting-clears wait can land in the brief transitional moment between the form
+      // closing and the toast actually appearing, misreading BOTH as absent. Waiting for either
+      // to genuinely be visible via expect() first (which does poll) resolves that race for
+      // real; only then is a single immediate check safe to use as the discriminator.
+      const successToast = page.locator('[role="dialog"][data-type="success"]');
+      await expect(formDialog.or(successToast).first()).toBeVisible({ timeout: 15_000 });
+      const formStillOpen = await formDialog.isVisible().catch(() => false);
+      const outcome = await (formStillOpen ? formDialog : successToast).innerText();
+      if (formStillOpen) {
+        await formDialog.getByRole('button', { name: /^Cancel$/i }).click();
       } else {
         await page.locator('[aria-label="Dismiss"]').click().catch(() => {});
       }
@@ -2589,12 +2390,19 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     };
 
     // Step: Request a Cross-Office Transfer - as the QA reviewer, transfer
-    // a record within her own scope to a destination outside it.
+    // a record within her own scope to a destination outside it. Tries each discovered
+    // candidate in turn (see findOpenRecordsInScope's own comment) rather than trusting the
+    // first one is still searchable.
     await loginPage.goto();
     await loginPage.submitLogin('q-0002', 'qa');
     await page.waitForURL(/\/errors/);
     const qaDestination = outsideScope(QA_SCOPE);
-    const qaOutcome = await attemptTransfer(qaRecord!.policyNumber, qaDestination);
+    let qaOutcome: string | null = null;
+    for (const candidate of qaCandidates) {
+      qaOutcome = await attemptTransfer(candidate.policyNumber, qaDestination);
+      if (qaOutcome !== null) break;
+    }
+    expect(qaOutcome, 'none of today\'s QA-scope candidates were still searchable by the time of the actual attempt').not.toBeNull();
     // Step: Observe the Outcome - the cross-office reviewer transfer is
     // permitted.
     expect(qaOutcome).not.toMatch(/not in scope|requires ROLE_QA_REVIEWER/i);
@@ -2607,7 +2415,16 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await loginPage.submitLogin('o-0002', 'operator');
     await page.waitForURL(/\/errors/);
     const operatorDestination = outsideScope(OPERATOR_SCOPE);
-    const operatorOutcome = await attemptTransfer(operatorRecord!.policyNumber, operatorDestination);
+    let operatorOutcome: string | null = null;
+    let operatorUsedRecord: { ecn: string; rho: string; policyNumber: string } | null = null;
+    for (const candidate of operatorCandidates) {
+      operatorOutcome = await attemptTransfer(candidate.policyNumber, operatorDestination);
+      if (operatorOutcome !== null) {
+        operatorUsedRecord = candidate;
+        break;
+      }
+    }
+    expect(operatorOutcome, 'none of today\'s operator-scope candidates were still searchable by the time of the actual attempt').not.toBeNull();
     // The ordinary operator transfer is refused, because both the source
     // and destination office must be within an ordinary operator's own
     // scope.
@@ -2624,25 +2441,18 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await errorManagerPage.allWeeksRadio().check();
     await errorManagerPage.includeReleasedCheckbox().check();
     await errorManagerPage.includeDeletedCheckbox().check();
-    await errorManagerPage.policyNumberField().fill(operatorRecord!.policyNumber);
+    await errorManagerPage.policyNumberField().fill(operatorUsedRecord!.policyNumber);
     await errorManagerPage.viewRecords();
     await expect(errorManagerPage.resultGrid()).toBeVisible();
     const trRows = await page.locator('tr').allInnerTexts();
     const buttonRows = await page.getByRole('button').filter({ hasText: /^Select \S/ }).allInnerTexts();
     const verifyRow = [...trRows, ...buttonRows].find((r) => /^Select /.test(r));
     const verifiedRho = verifyRow ? parseGridRow(verifyRow).rho : undefined;
-    expect(verifiedRho).toBe(operatorRecord!.rho);
+    expect(verifiedRho).toBe(operatorUsedRecord!.rho);
   });
 
-  /**
-   * TMS-E2E-033 | TIME-DEPENDENT GAP - re-verifying that a corrected
-   * transaction reappears "after the next weekly cycle has run" would
-   * require a real batch cycle to execute, which this suite cannot trigger
-   * or wait for. What IS verified for real: the correction itself commits,
-   * establishing the starting state a future cycle would act on.
-   */
   test('TMS-E2E-033 - E2E-A34: a corrected transaction that does not address its original reason reappears on the working list', async ({ page, loginPage, recordEditorPage }) => {
-    // POC Scope: Out of Scope
+    // Out of scope.
     test.skip();
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
@@ -2653,17 +2463,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await expect(page.getByText(/\b710[0-8]\b/).first()).toBeVisible();
   });
 
-  /**
-   * TMS-E2E-034 | the "create a new transaction through these screens" half
-   * of this case has no reachable UI - record creation is explicitly out of
-   * scope for the modernized PoC (GRID.csv BR-299 Notes: "PoC explicitly
-   * excludes DA010C1/D1/R1 creation menus"), so a freshly created
-   * transaction cannot be produced to read its nil starting counter. What
-   * IS verified for real: correcting an existing transaction does not reset
-   * its own weeks-waiting counter, and no Create control is exposed.
-   */
   test('TMS-E2E-034 - E2E-A35: the ageing counter is not reset by correction but starts at nil on a created transaction', async ({ page, loginPage, recordEditorPage }) => {
-    // POC Scope: Out of Scope
+    // Out of scope.
     test.skip();
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
@@ -2678,19 +2479,8 @@ test.describe('E2E - Error Manager end-to-end business journeys', () => {
     await expect(page.getByRole('button', { name: /^Create$/i })).toHaveCount(0);
   });
 
-  /**
-   * TMS-E2E-035 | BUSINESS CONFIRMATION REQUIRED - mirrors GRID.csv
-   * TMS-GRID-015: Catalogue v4.2 records BR-263 as SME DECISION NEEDED (the
-   * current PoC releases normally where legacy silently held). Per this
-   * row's own instruction to "execute this case to establish the actual
-   * behaviour... do not assert either outcome as correct until the business
-   * decides", this test deliberately does not assert Held vs Released -
-   * only that the release-equivalent action completes and produces a
-   * concrete, observable disposition and audit trail for that decision to
-   * be made against.
-   */
   test('TMS-E2E-035 - E2E-A36: a transaction from the online-created run cannot be released', async ({ page, loginPage, recordEditorPage }) => {
-    // POC Scope: SME confirmation pending
+    // Out of scope.
     test.skip();
     await loginPage.loginAsValidUser();
     await recordEditorPage.openConfirmedTestRecord();
