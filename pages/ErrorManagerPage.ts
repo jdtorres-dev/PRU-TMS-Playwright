@@ -13,12 +13,26 @@ export class ErrorManagerPage extends BasePage {
   // there (it does not return to the search screen on its own), so callers that need the
   // search screen again must navigate back to it explicitly rather than assume it's current.
   async goto(): Promise<void> {
-    await this.page.goto(`${BASE_URL}/errors`);
+    // waitUntil: 'domcontentloaded' rather than the default 'load' - same fix as LoginPage's own
+    // goto() (see its comment): the default requires every last resource the page requests to
+    // finish, and a single stalled request on this shared demo environment can block goto()
+    // itself from ever resolving. Callers already wait on a real element afterward (e.g.
+    // selectSearchTab()'s own tab locator), so goto() only needs the DOM to exist.
+    await this.page.goto(`${BASE_URL}/errors`, { waitUntil: 'domcontentloaded' });
   }
 
   async selectSearchTab(tab: SearchTab): Promise<void> {
     // exact: true - otherwise "CB Records" substring-matches "Non-CB Records" too.
-    await this.page.getByRole('tab', { name: tab, exact: true }).click();
+    const tabLocator = this.page.getByRole('tab', { name: tab, exact: true });
+    // Live-confirmed (2026-09-11): this click can hang on "waiting for element to be visible,
+    // enabled and stable" even when the tab's own aria-selected is already "true" - i.e. it is
+    // already the active tab, so there is nothing for a click to actually change, and that
+    // stability check has been observed never resolving in that state. Skip the click when the
+    // tab is already selected, and when a real switch is needed, wait for aria-selected to
+    // actually flip rather than just trusting the click resolved.
+    if ((await tabLocator.getAttribute('aria-selected')) === 'true') return;
+    await tabLocator.click();
+    await expect(tabLocator).toHaveAttribute('aria-selected', 'true');
   }
 
   /**

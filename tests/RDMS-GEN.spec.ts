@@ -3,9 +3,6 @@ import { Locator, Page } from '@playwright/test';
 import {
   VALID_USERNAME,
   VALID_PASSWORD,
-  SECONDARY_TEST_POLICY_NUMBER,
-  TERTIARY_TEST_POLICY_NUMBER,
-  QUATERNARY_TEST_POLICY_NUMBER,
   QUINARY_TEST_POLICY_NUMBER,
   MODECODE_TEST_POLICY_NUMBER,
   MODECODE_TEST_ERROR_ID,
@@ -13,6 +10,22 @@ import {
   BRANCH2_TEST_ERROR_ID,
   RHO_TEST_POLICY_NUMBER,
   RHO_TEST_ERROR_ID,
+  GEN050_TEST_POLICY_NUMBER,
+  GEN050_TEST_ERROR_ID,
+  GEN070_TEST_POLICY_NUMBER,
+  GEN070_TEST_ERROR_ID,
+  GEN074_TEST_POLICY_NUMBER,
+  GEN074_TEST_ERROR_ID,
+  GEN078_TEST_POLICY_NUMBER,
+  GEN078_TEST_ERROR_ID,
+  GEN084_TEST_POLICY_NUMBER,
+  GEN084_TEST_ERROR_ID,
+  GEN092_TEST_POLICY_NUMBER,
+  GEN092_TEST_ERROR_ID,
+  GEN098_TEST_POLICY_NUMBER,
+  GEN098_TEST_ERROR_ID,
+  GEN110_TEST_POLICY_NUMBER,
+  GEN110_TEST_ERROR_ID,
 } from '../test-data/constants';
 import type { RecordEditorPage } from '../pages/RecordEditorPage';
 
@@ -29,12 +42,12 @@ import type { RecordEditorPage } from '../pages/RecordEditorPage';
  *    language, several of which the CSV itself documents (Notes column) as
  *    ACCEPTED DIVERGENCE / PHASE-1 GAP versus the modernized RDMS UI. Their
  *    field mnemonics (e.g. M1POLN, TRNCODE) are legacy mainframe codes not
- *    confirmed to map onto a specific modernized element. These are asserted
- *    structurally (record reached, tab selected, Edit mode entered) with a
- *    comment quoting the specific rule/expected result that remains
- *    unverified - except TMS-RDMS-GEN-010 (BR-057), whose "no corrections
+ *    confirmed to map onto a specific modernized element, so these would
+ *    only be asserted structurally (record reached, tab selected, Edit mode
+ *    entered) - except TMS-RDMS-GEN-010 (BR-057), whose "no corrections
  *    made" refusal is concretely and safely checkable by saving with nothing
- *    changed.
+ *    changed. All of rows 001-046 are out of scope for this file (see POC
+ *    Scope below).
  *
  *  - Rows 047-117 (BR-373..BR-410) give per-field accepted/breaching literal
  *    values for the modernized General Information fields. Where a row gives
@@ -56,10 +69,10 @@ import type { RecordEditorPage } from '../pages/RecordEditorPage';
  *
  * POC Scope, per the approved reference (PRU_TMS_RDMS-GEN_Organized_Steps,
  * 117 rows): every row is tagged out of scope / phase-1 gap / phase-1
- * (mod-spec feature). Only rows tagged out of scope are disabled here - via
- * test.skip(), never deletion, each with a leading "OUT OF SCOPE" comment
- * naming its Test Case ID so it can be re-enabled later. phase-1 gap and
- * phase-1 (mod-spec feature) rows remain in scope and execute normally.
+ * (mod-spec feature). Rows 001-046 (out of scope or phase-1 gap) are disabled
+ * here via test.skip() - never deletion, so they can be re-enabled later -
+ * each with a single "Out of scope." comment. Rows 047-117 (phase-1 mod-spec
+ * feature) remain in scope and execute normally.
  *
  * Several of the modernized General Information fields (rho, transCode,
  * transMode, polKind, faceIncInd, unionCodeWritAgt/Nwrit, suplementalKind,
@@ -293,10 +306,10 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // overlapping fields at the same time can still race.)
   //
   // NOT `mode: 'serial'` - Playwright's serial mode skips every remaining test in the block
-  // after the first failure, which would silently stop the suite partway through any of the
-  // intentionally-failing Expected Failure - Phase-1 Gap tests and violate the requirement
-  // that every Phase-1 Gap test keep executing. `mode: 'default'` is what's needed instead:
-  // per Playwright's own docs, it "overrides project configuration that uses fullyParallel"
+  // after the first failure, which would silently stop this file partway through its
+  // remaining rows on any single unexpected failure. `mode: 'default'` is what's needed
+  // instead: per Playwright's own docs, it "overrides project configuration that uses
+  // fullyParallel"
   // (playwright.config.ts sets fullyParallel: true suite-wide) and runs this file's tests in
   // declaration order, in a single worker, with retries handled independently - a failure in
   // one never skips the rest, and none of them ever run concurrently with each other. Unlike
@@ -306,98 +319,81 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // ignores that CLI flag and uses the configured worker pool.
   test.describe.configure({ mode: 'default' });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-001, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-001 - BR-002: A policy number keyed anywhere in its field is right-aligned so that it matches the format held onâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The value is shifted right one position at a time until the final position is filled. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-002, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-002 - BR-003: The operator must state what is to be done: an item identifier alone, with no function selected, isâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The operator is told to mark a function, the cursor is placed on the first function field and the three function fields are intensified. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-003, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-003 - BR-006: A suspended item is located either by the error control number quoted on the weekly listing or by pâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A control number performs a direct keyed read; a policy number browses the policy index and the control number found is displayed so the opâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-004, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-004 - BR-016: Starting a new item or re-keying an identifier clears any policy browse position, so that the operaâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The saved policy number and browse position are cleared before the new key is processed. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-005, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-005 - BR-017: Re-displaying the page already on screen holds the record for amendment, whereas moving to a differâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: Where the page equals the page last displayed the record is read for update; where the operator has typed a different page it is read withoâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-006, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-006 - BR-034: A brand new transaction always starts on the first data-entry screen regardless of what page was reâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The first page is presented. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-007, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-007 - BR-036: Only the fields the operator actually typed over are taken from the screen; every untouched field iâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: ACCEPTED DIVERGENCE for Phase 1. Legacy behaviour, which is NOT to be asserted: The record value is re-displayed; where the operator keyedâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-008 [Expected Failure - Phase-1 Gap] - BR-047: Amounts on a machine-generated compensation transaction must not be altered online unless the transâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // AGNOWA (Test Data field per the reference) is the Writing Agent's Agreement Number -
-  // BR-047 requires this (and premium/commission amounts) be protected on a machine-
-  // generated compensation transaction. This suite has no way to seed a record that
-  // actually satisfies that precondition (not manually created, no qualifying action
-  // code, not from a listed batch run), so this exercises the rule's literal action
-  // (key the field, save) against whatever record is available and asserts the rule's
-  // own stated outcome - refused/protected - which the modernized UI does not currently
-  // enforce for this field. PHASE-1 GAP recorded in Catalogue v4.2 (see DEF-BR047).
   const field = fieldByName(page, 'agreeNoWritAgt');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await field.fill('');
   await field.fill('AG9999');
   await recordEditorPage.clickSave();
-  // Expected (per BR-047): protected field, save refused / value unchanged.
   await expect(screeningErrorBanner(page)).toBeVisible();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -405,27 +401,17 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'agreeNoWritAgt')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-009 [Expected Failure - Phase-1 Gap] - BR-050: Record code and transaction code are not amendable on service register suspensions in one reason raâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // TRNCODE (Test Data field per the reference) is Transaction Code - BR-050 requires
-  // this (and Record Code) be protected on a service register suspension whose reason
-  // falls in the reserved range. This suite has no way to seed that precise suspension
-  // reason, so this exercises the rule's literal action against whatever record is
-  // available and asserts the rule's own stated outcome - protected/refused - which the
-  // modernized UI does not currently enforce (Transaction Code renders as a normal,
-  // always-editable combobox regardless of suspension reason). PHASE-1 GAP recorded in
-  // Catalogue v4.2 (see DEF-BR050).
   const field = fieldByName(page, 'transCode');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await selectComboboxOption(page, field, '01');
   await recordEditorPage.clickSave();
-  // Expected (per BR-050): protected field, save refused / value unchanged.
   await expect(screeningErrorBanner(page)).toBeVisible();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -433,210 +419,180 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'transCode')).toHaveValue(original);
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-010, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-010 - BR-057: A transaction is only updated where the operator has actually changed something', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // No field is changed before Save - exercises the documented "nothing keyed" refusal path.
   await recordEditorPage.clickSave();
   await expect(page.getByText(/NO CORRECTIONS WERE MADE/i)).toBeVisible();
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-011, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-011 - BR-093: Correcting the branch, the supplementary kind or the plan invalidates the screen\'s product descriptâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A recalculation marker is set, the reference service consulted, and the returned description placed in the screen heading. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-012, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-012 - BR-170: Every field on every correction screen follows one uniform handling convention, distinguishing a fiâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: ACCEPTED DIVERGENCE for Phase 1. Legacy behaviour, which is NOT to be asserted: A field not keyed and not erased is skipped entirely; a fieâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-013, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-013 - BR-170: Negative: the condition governed by BR-170 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-014, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-014 - BR-173: The regional office owning a transaction must be one of the six live offices, with two further codeâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A valid office is applied to the record and to the suspense header; an invalid one is refused and highlighted. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-015, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-015 - BR-173: Negative: the condition governed by BR-173 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-016, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-016 - BR-174: A district code must be a four-character office identifier whose first position is a letter, whoseâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: Any breach of the shape rules or any unacceptable character is refused; a blank district is shown as markers. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-017, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-017 - BR-174: Negative: the condition governed by BR-174 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-018, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-018 - BR-175: A staff code must always be supplied and be a single acceptable character; blank is not acceptable', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A blank or unacceptable character is refused and the field highlighted. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-019, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-019 - BR-175: Negative: the condition governed by BR-175 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-020, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-020 - BR-176: An agency number must be numeric, one reserved value may never be used, and the reserved managementâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The forbidden reserved value or a non-numeric entry is refused; the management agency on the first half of a record silently forces the chaâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-021, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-021 - BR-176: Negative: the condition governed by BR-176 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-022, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-022 - BR-177: A producer agreement number is a six-character identifier, except on debit insurance business whereâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A non-numeric agreement number on those branches is refused; on all other branches an alphanumeric one is accepted. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-023, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-023 - BR-177: Negative: the condition governed by BR-177 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-024, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-024 - BR-178: A policy number must be present unless the transaction is a producer-level adjustment rather than aâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A blank policy number is accepted only where the action code marks the transaction as producer level; otherwise it is refused and shown asâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-025, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-025 - BR-178: Negative: the condition governed by BR-178 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-026, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-026 - BR-182: One special charge branch supports only a single transaction type, and any other type keyed with itâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The whole transaction code is overwritten and the audit records the corrected value; a non-numeric transaction type at that point is a hardâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-027, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-027 - BR-183: For the life and variable product families the plan is mandatory and must be a right-justified fourâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A mandatory-field failure is raised; the value is right justified and stripped of blanks before checking, and every remaining character musâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-028 [Expected Failure - Phase-1 Gap] - BR-186: A sum-assured increase marker is only meaningful on life business, must be blank or one of three inâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // The reference gives no field mnemonic for BR-186 itself (its own step text is the
-  // generic "key the field, set the disposition..." placeholder) - "sum-assured increase
-  // marker" is inferred to be Face Inc(rease) Indicator, the only General Information
-  // field matching that description. BR-186 requires it be blank or one of a defined set
-  // of indicators, and refused on a barred branch/marker combination or an out-of-set
-  // value. This suite cannot seed the specific "barred combination" precondition, so this
-  // exercises the literal action (key the field, save) and asserts the rule's own stated
-  // outcome - refused where the marker/branch combination is barred - against whatever
-  // combination this record currently has. PHASE-1 GAP recorded in Catalogue v4.2 (see
-  // DEF-BR186).
   const field = fieldByName(page, 'faceIncInd');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await selectComboboxOption(page, field, 'I');
   await recordEditorPage.clickSave();
-  // Expected (per BR-186): refused if this marker/branch combination is barred.
   await expect(screeningErrorBanner(page)).toBeVisible();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -644,21 +600,15 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'faceIncInd')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-029 [Expected Failure - Phase-1 Gap] - BR-186: Negative: the condition governed by BR-186 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // Same field as GEN-028 (see DEF-BR186) - here the value keyed is outside the
-  // permitted set of Face Inc Indicator codes entirely (not just a barred combination).
   const field = fieldByName(page, 'faceIncInd');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
-  // No option matches "ZZZ" - the combobox's bound value stays unchanged, so the
-  // refusal surfaces as "NO CORRECTIONS WERE MADE" rather than a per-field
-  // "SCREENING ERROR" - both equally demonstrate nothing was committed.
   await field.click();
   await field.fill('ZZZ');
   await recordEditorPage.clickSave();
@@ -669,62 +619,47 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'faceIncInd')).toHaveValue(original);
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-030, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-030 - BR-189: Union codes for both producers must be numeric or blank', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: A non-numeric value is refused and the field highlighted; blank is accepted. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-031, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-031 - BR-189: Negative: the condition governed by BR-189 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-032 [Expected Failure - Phase-1 Gap] - BR-190: Debit life business recognises only a defined list of supplementary kinds, the kind is mandatory whâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // SUPLKND (Test Data field per the reference) is Supplementary Kind - BR-190 requires
-  // debit life business to recognise only a defined list of kinds, mandatory on creation,
-  // and a "special branch" to silently force its own fixed value regardless of what is
-  // keyed. This suite cannot confirm this record is debit-life business or the special
-  // branch, so this exercises the literal action against whatever branch this record has
-  // and asserts the rule's own stated outcome. PHASE-1 GAP recorded in Catalogue v4.2
-  // (see DEF-BR190).
   const field = fieldByName(page, 'suplementalKind');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await selectComboboxOption(page, field, 'A');
   await recordEditorPage.clickSave();
-  // Expected (per BR-190): on the special branch, the value keyed is silently overridden
-  // back to that branch's own fixed kind rather than persisted as keyed.
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await expect(fieldByName(page, 'suplementalKind')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-033 [Expected Failure - Phase-1 Gap] - BR-190: Negative: the condition governed by BR-190 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // Same field as GEN-032 (see DEF-BR190) - here the value keyed is outside the defined
-  // list of supplementary kinds entirely.
   const field = fieldByName(page, 'suplementalKind');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -738,27 +673,17 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'suplementalKind')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-034 [Expected Failure - Phase-1 Gap] - BR-191: On the mainstream life and health branches the first action code must be blank, one of five recogniâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // ACTCOD1 (Test Data field per the reference) is Action Code 1 - BR-191 requires this
-  // be blank or one of five recognised codes on the eight mainstream life/health
-  // branches, with any other value refused (V082 action_code1 has 13 codes with valid-
-  // branch combinations per Catalogue v4.2). This suite cannot confirm this record's
-  // branch is one of the eight mainstream ones, so this exercises the literal action
-  // against whatever branch this record has. PHASE-1 GAP recorded in Catalogue v4.2 (see
-  // DEF-BR191).
   const field = fieldByName(page, 'actionCode1');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await selectComboboxOption(page, field, '9');
   await recordEditorPage.clickSave();
-  // Expected (per BR-191): refused if "9" is not one of the five codes recognised for
-  // this branch.
   await expect(screeningErrorBanner(page)).toBeVisible();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -766,15 +691,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'actionCode1')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-035 [Expected Failure - Phase-1 Gap] - BR-191: Negative: the condition governed by BR-191 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // Same field as GEN-034 (see DEF-BR191) - here the value keyed is outside the entire
-  // 13-code domain V082 documents, not just outside the five codes valid for this branch.
   const field = fieldByName(page, 'actionCode1');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -788,39 +710,30 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'actionCode1')).toHaveValue(original);
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-036, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-036 - BR-196: The transaction mode must be two letters, except on the two transfer modes where the second positioâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: Anything else is refused; a blank mode is redisplayed as markers. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-037, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-037 - BR-196: Negative: the condition governed by BR-196 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-038 [Expected Failure - Phase-1 Gap] - BR-198: The issuing jurisdiction must be a recognised domestic state number, or a recognised overseas proviâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // ISUSTAT (Test Data field per the reference) is Issue State - BR-198 requires the
-  // issuing jurisdiction be a recognised domestic state or overseas province code, with
-  // blank tolerated ONLY for products that are not licence-checked. This suite cannot
-  // confirm this record's product is not licence-checked, so a blank save is expected
-  // (per the rule's default, licence-checked case) to be refused.
-  // PHASE-1 GAP recorded in Catalogue v4.2 (see DEF-BR198).
   const field = fieldByName(page, 'issueState');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -828,7 +741,6 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await field.fill('');
   await page.getByRole('heading', { name: 'General Information' }).click();
   await recordEditorPage.clickSave();
-  // Expected (per BR-198, licence-checked case): blank is refused.
   await expect(saveRefusedBanner(page)).toBeVisible();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -836,15 +748,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'issueState')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-039 [Expected Failure - Phase-1 Gap] - BR-198: Negative: the condition governed by BR-198 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // Same field as GEN-038 (see DEF-BR198) - here the value keyed is outside the
-  // recognised domestic-state/overseas-province set entirely.
   const field = fieldByName(page, 'issueState');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -858,19 +767,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'issueState')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-040 [Expected Failure - Phase-1 Gap] - BR-199: The charge-back office is expressed as a numeric or letter office code on partner business and as aâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // CBOIRHO (Test Data field per the reference) is Charge Back RHO / Ordinary Issue RHO -
-  // BR-199 requires this be a numeric/letter office code on partner business (where the
-  // field cannot be skipped) and refuses an invalid code. This suite cannot confirm this
-  // record is partner business, so a blank value is expected (per the partner-business
-  // case) to be refused rather than skippable. PHASE-1 GAP recorded in Catalogue v4.2
-  // (see DEF-BR199).
   const field = fieldByName(page, 'chrgBckRhoOrdIssRho');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -878,7 +780,6 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await field.fill('');
   await page.getByRole('heading', { name: 'General Information' }).click();
   await recordEditorPage.clickSave();
-  // Expected (per BR-199, partner-business case): the field cannot be skipped/left blank.
   await expect(saveRefusedBanner(page)).toBeVisible();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -886,15 +787,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'chrgBckRhoOrdIssRho')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-041 [Expected Failure - Phase-1 Gap] - BR-199: Negative: the condition governed by BR-199 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // Same field as GEN-040 (see DEF-BR199) - here the value keyed is an invalid office
-  // code (neither a recognised numeric nor letter code).
   const field = fieldByName(page, 'chrgBckRhoOrdIssRho');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -908,23 +806,18 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'chrgBckRhoOrdIssRho')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-042 [Expected Failure - Phase-1 Gap] - BR-202: The channel bypass marker, the action code and the commission scale code on the identification screâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // OVCHNL (Test Data field per the reference) is Override Channel Code - BR-202 requires
-  // an unacceptable character here be refused and the field highlighted; otherwise the
-  // value is applied and audited. PHASE-1 GAP recorded in Catalogue v4.2 (see DEF-BR202).
   const field = fieldByName(page, 'overrideChannelCode');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await field.fill('');
   await field.fill('#@');
   await recordEditorPage.clickSave();
-  // Expected (per BR-202): an unacceptable character is refused.
   await expect(screeningErrorBanner(page)).toBeVisible();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
@@ -932,15 +825,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'overrideChannelCode')).toHaveValue(original);
   });
 
-  // PHASE-1 GAP (POC Scope = Phase-1 Gap) - kept, disabled via test.skip so it does not
-  // execute, per updated instruction.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-043 [Expected Failure - Phase-1 Gap] - BR-202: Negative: the condition governed by BR-202 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  // Same field as GEN-042 (see DEF-BR202) - here the value keyed is longer than the
-  // field permits, a second way this rule's constraint can be breached.
   const field = fieldByName(page, 'overrideChannelCode');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -954,34 +844,31 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'overrideChannelCode')).toHaveValue(original);
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-044, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-044 - BR-218: The commission marketing code must be one of three recognised marketing categories', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: Any other value is refused and the field highlighted. - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-045, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-045 - BR-218: Negative: the condition governed by BR-218 is breached and the entry must be refused', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The save is refused. The failing field is highlighted, the cursor is placed on it, and where the refused entry was blank the field is overwâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
-  // OUT OF SCOPE (reference: PRU_TMS_RDMS-GEN_Organized_Steps, TMS-RDMS-GEN-046, POC Scope = out of scope) - kept, disabled via test.skip so it does not execute.
+  // Out of scope.
   test.skip('TMS-RDMS-GEN-046 - BR-269: To amend the contents of a suspended transaction rather than its disposition, the operator selectsâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
   await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: The line's identifier is moved to the correction screen, the entire enquiry context is saved to a terminal-owned store, and control transfeâ¦ - not independently checkable without seeded backend state this CSV does not supply a concrete literal for.
   });
 
   test('TMS-RDMS-GEN-047 - BR-373: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the facility refusâ¦', async ({ page, loginPage, recordEditorPage }) => {
@@ -1018,29 +905,24 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await loginPage.loginAsValidUser();
   // Uses RHO_TEST_POLICY_NUMBER (test-data/constants.ts) - a single dedicated record opened
   // directly - instead of dynamically discovering a HELD record via
-  // ErrorManagerPage.findEligibleHeldRecord(). That dynamic approach was live-reproduced
-  // failing intermittently (2026-09-03): it performs two separate CB Records searches per
-  // run (one to discover a record, one more inside openRecord() to reopen it), doubling
-  // exposure to this environment's transient navigation/click timeouts even though the
-  // records it found were genuinely valid. It's also unnecessary here: this test never
-  // Saves the selected RHO value (see below), so the original reason for avoiding the
-  // shared TEST_POLICY_NUMBER fixture - its confirmed RHO scope-lockout bug - doesn't apply
-  // to any record this test merely opens and Cancels.
+  // ErrorManagerPage.findEligibleHeldRecord(). That dynamic approach performs two separate CB
+  // Records searches per run (one to discover a record, one more inside openRecord() to
+  // reopen it), doubling exposure to this environment's transient navigation/click timeouts
+  // even though the records it found were genuinely valid.
   await recordEditorPage.openRecord(RHO_TEST_POLICY_NUMBER, RHO_TEST_ERROR_ID);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'rho');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
-  // Open RHO's combobox listbox (unfiltered - clicking alone lists every option) and pick
-  // any option other than the one already selected - live-confirmed that filtering the
-  // listbox down to the currently-selected value's own text then shows "No options found"
-  // (the control excludes the selected option from its own filtered results), so a fixed
-  // filter string is not reliable here.
+  // RHO is per-account scoped: saving a value outside the saving account's own scope makes
+  // the record invisible to that account afterward on future lookups (real access control,
+  // not a defect). "B - CAMO" is within admin/admin's own scope, unlike "A" and "Q"
+  // (test-data/constants.ts) - picked explicitly here instead of blindly taking the first
+  // option in the listbox.
   await field.click();
-  const option = page.getByRole('option')
-    .filter({ hasNotText: original })
-    .first();
+  await field.fill('B');
+  const option = page.getByRole('option').filter({ hasText: /CAMO/i }).first();
   await expect(option).toBeVisible();
   await option.click();
   await expect(page.getByRole('listbox')).toHaveCount(0);
@@ -1048,14 +930,21 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   const value = await field.inputValue();
   expect(value).not.toBe(original);
   expect(value.length).toBeGreaterThan(0);
-  // Not saved: per test-data/constants.ts, committing a real, different RHO value via this
-  // Edit UI is a confirmed environment/access-control bug - the save itself succeeds (HTTP
-  // 200), but the record silently drops outside this admin session's own viewing scope (0
-  // results in every Error Manager search, 403 "Out of scope" on direct API lookup).
-  // Reproduced repeatedly across unrelated records, so RHO must never be saved with a real,
-  // different value by any test in this suite. clickCancel() (not Save) demonstrates the
-  // value is a valid, selectable option without risking this dedicated fixture.
-  await recordEditorPage.clickCancel();
+  // Saving "B" here (within admin/admin's own scope) exercises the real Save + persist round
+  // trip without crossing the account's own RHO-scope boundary.
+  await recordEditorPage.clickSave();
+  await expect(screeningErrorBanner(page)).toHaveCount(0);
+  await recordEditorPage.openRecord(RHO_TEST_POLICY_NUMBER, RHO_TEST_ERROR_ID);
+  await recordEditorPage.openRdmsTab('General Information');
+  await recordEditorPage.clickEdit();
+  await expect(fieldByName(page, 'rho')).toHaveValue(value);
+  // Restore the original RHO so this dedicated fixture's own documented value (see
+  // test-data/constants.ts) doesn't permanently drift as a side effect of this test.
+  await fieldByName(page, 'rho').click();
+  await page.getByRole('option').filter({ hasText: /NEMO/i }).first().click();
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await recordEditorPage.clickSave();
+  await expect(screeningErrorBanner(page)).toHaveCount(0);
   });
 
   test('TMS-RDMS-GEN-049 - BR-374: Negative: a value breaching the BR-374 constraint on rho must be refused', async ({ page, loginPage, recordEditorPage }) => {
@@ -1065,8 +954,9 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // ErrorManagerPage.findEligibleHeldRecord(). That dynamic approach performs two separate
   // CB Records searches per run (one to discover a record, one more inside openRecord() to
   // reopen it), doubling exposure to this environment's transient navigation/click
-  // timeouts. This test never selects a real RHO option (see below), so it carries no
-  // combination-validity or scope-lockout risk on any record, dedicated or otherwise.
+  // timeouts. This test never selects a real RHO option (see below), so it never risks landing
+  // outside this account's own RHO scope (see GEN-048's own comment) on any record, dedicated
+  // or otherwise.
   await recordEditorPage.openRecord(RHO_TEST_POLICY_NUMBER, RHO_TEST_ERROR_ID);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
@@ -1091,19 +981,19 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
 
   test('TMS-RDMS-GEN-050 - BR-375: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
-  // Uses the dedicated secondary fixture (SECONDARY_TEST_POLICY_NUMBER in
-  // test-data/constants.ts) instead of the shared TEST_POLICY_NUMBER fixture: polNo is that
-  // shared fixture's own search key, so committing a new value to it would relocate/break
-  // every other concurrently-run spec that depends on it. Nothing else in this suite
-  // references this secondary record, so a real Save + restore round trip is safe here.
-  await recordEditorPage.openRecordByPolicyNumber(SECONDARY_TEST_POLICY_NUMBER);
+  // Uses the dedicated GEN050_TEST_POLICY_NUMBER fixture (test-data/constants.ts) instead of
+  // the shared TEST_POLICY_NUMBER fixture: polNo is that shared fixture's own search key, so
+  // committing a new value to it would relocate/break every other concurrently-run spec that
+  // depends on it. Nothing else in this suite references this dedicated record, so a real
+  // Save + restore round trip is safe here.
+  await recordEditorPage.openRecordByPolicyNumber(GEN050_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'polNo');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
   await field.fill('');
-  await field.fill('123456789');
+  await field.fill('246813579');
   await recordEditorPage.clickSave();
   // Save succeeded: no screening-error banner, and the editor leaves amendment mode.
   await expect(screeningErrorBanner(page)).toHaveCount(0);
@@ -1114,8 +1004,8 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // retries the click since a lingering success toast from the Save above can still be
   // sitting over this button.
   await reenterEditMode(recordEditorPage);
-  await expect(fieldByName(page, 'polNo')).toHaveValue('123456789');
-  // Restore the secondary fixture's original policy number so it's reusable on the next run.
+  await expect(fieldByName(page, 'polNo')).toHaveValue('246813579');
+  // Restore the dedicated fixture's original policy number so it's reusable on the next run.
   await fieldByName(page, 'polNo').fill('');
   await fieldByName(page, 'polNo').fill(original);
   await recordEditorPage.clickSave();
@@ -1336,13 +1226,13 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-379, "Screen
-  // Field(s)": `branch ∈ ('D','P','Z')`) confirms this rule governs the `branch` field.
-  // Live-confirmed: Branch has zero editable inputs and zero field labels anywhere on the
-  // General Information tab - it renders only as static header text ("BRANCH: —"), the
-  // same confirmed-read-only pattern as recordCode/BR-386 and bypassScreening/BR-403. This
-  // rule's "value keyed into branch" premise does not apply to this field on the modernized
-  // UI, so no keyed-value scenario exists to exercise here.
+  // test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-379, "Screen Field(s)":
+  // `branch ∈ ('D','P','Z')`) confirms this rule governs the `branch` field. Branch has zero
+  // editable inputs and zero field labels anywhere on the General Information tab - it
+  // renders only as static header text ("BRANCH: —"), the same read-only pattern as
+  // recordCode/BR-386 and bypassScreening/BR-403. This rule's "value keyed into branch"
+  // premise does not apply to this field on the modernized UI, so no keyed-value scenario
+  // exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-059 - BR-379: Negative: the constraint BR-379 enforces is breached and the save must be refused', async ({ page, loginPage, recordEditorPage }) => {
@@ -1351,8 +1241,8 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: same finding as TMS-RDMS-GEN-058/BR-379 above - branch is confirmed read-only
-  // on this tab, so no keyed-value scenario (positive or negative) exists to exercise here.
+  // Same finding as TMS-RDMS-GEN-058/BR-379 above - branch is read-only on this tab, so no
+  // keyed-value scenario (positive or negative) exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-060 - BR-380: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
@@ -1606,10 +1496,11 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
 
   test('TMS-RDMS-GEN-070 - BR-385: channelCode composition - position 1 in {P,W,S,I,X}, position 2 in {R,C,P,S,X,#,$} - a valid composition is acceptedâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
-  // Using QUATERNARY_TEST_POLICY_NUMBER (a record dedicated to real mutation testing - see
-  // test-data/constants.ts) rather than the shared fixture, and not restoring afterward, per
-  // explicit instruction.
-  await recordEditorPage.openRecordByPolicyNumber(QUATERNARY_TEST_POLICY_NUMBER);
+  // Using GEN070_TEST_POLICY_NUMBER (a record dedicated to real mutation testing - see
+  // test-data/constants.ts, confirmed live accepting "PC") rather than the shared fixture, and
+  // not restoring afterward, per explicit instruction. "IR" (the other toggle target below)
+  // has not been independently confirmed on this specific record.
+  await recordEditorPage.openRecordByPolicyNumber(GEN070_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'channelCode');
@@ -1660,13 +1551,13 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: Record Code is confirmed live to render as a read-only value (a plain span,
-  // never an input) even in Edit mode - consistent with BR-050 elsewhere in this same CSV,
-  // which documents record code as not amendable. test-data/frontend-field-catalog.xlsx
-  // ("General - Identity") corroborates this: no "identity.recordCode" row exists in the
-  // editable field schema at all. BR-386's "value keyed into recordCode" premise does not
-  // apply to this field on the modernized UI (by the reference's own, separately-documented
-  // design), so no keyed-value scenario exists to exercise here.
+  // Record Code renders as a read-only value (a plain span, never an input) even in Edit
+  // mode - consistent with BR-050 elsewhere in this same CSV, which documents record code
+  // as not amendable. test-data/frontend-field-catalog.xlsx ("General - Identity")
+  // corroborates this: no "identity.recordCode" row exists in the editable field schema at
+  // all. BR-386's "value keyed into recordCode" premise does not apply to this field on the
+  // modernized UI (by the reference's own, separately-documented design), so no keyed-value
+  // scenario exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-073 - BR-386: Negative: a value breaching the BR-386 constraint on recordCode must be refused', async ({ page, loginPage, recordEditorPage }) => {
@@ -1675,13 +1566,13 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: Record Code is confirmed live to render as a read-only value (a plain span,
-  // never an input) even in Edit mode - consistent with BR-050 elsewhere in this same CSV,
-  // which documents record code as not amendable. test-data/frontend-field-catalog.xlsx
-  // ("General - Identity") corroborates this: no "identity.recordCode" row exists in the
-  // editable field schema at all. BR-386's "value keyed into recordCode" premise does not
-  // apply to this field on the modernized UI (by the reference's own, separately-documented
-  // design), so no keyed-value scenario exists to exercise here.
+  // Record Code renders as a read-only value (a plain span, never an input) even in Edit
+  // mode - consistent with BR-050 elsewhere in this same CSV, which documents record code
+  // as not amendable. test-data/frontend-field-catalog.xlsx ("General - Identity")
+  // corroborates this: no "identity.recordCode" row exists in the editable field schema at
+  // all. BR-386's "value keyed into recordCode" premise does not apply to this field on the
+  // modernized UI (by the reference's own, separately-documented design), so no keyed-value
+  // scenario exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-074 - BR-387: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
@@ -1690,10 +1581,10 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // it with a real "SCREENING ERROR" (live-confirmed: three separate, genuinely distinct
   // codes all refused - the same class of server-side combination-validity constraint
   // confirmed for rho/transCode/transMode/suplementalKind under GEN-048/BR-374). This is not
-  // a property of the field itself: live-confirmed on SECONDARY_TEST_POLICY_NUMBER
-  // (300000050, a record dedicated to real mutation testing - see test-data/constants.ts) a
-  // real, distinct code is accepted cleanly. Using that record here instead.
-  await recordEditorPage.openRecordByPolicyNumber(SECONDARY_TEST_POLICY_NUMBER);
+  // a property of the field itself: live-confirmed on GEN074_TEST_POLICY_NUMBER (a record
+  // dedicated to real mutation testing - see test-data/constants.ts) a real, distinct code is
+  // accepted cleanly. Using that record here instead.
+  await recordEditorPage.openRecordByPolicyNumber(GEN074_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'unionCodeWritAgt');
@@ -1800,12 +1691,9 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await loginPage.loginAsValidUser();
   // The shared suite-wide fixture record has no confirmed-safe way to round-trip this field
   // (see TMS-RDMS-GEN-074/BR-387's finding on the sibling unionCodeWritAgt combobox).
-  // TERTIARY_TEST_POLICY_NUMBER was tried here but proved unreliable for this specific field
-  // (repeated saves of individually-valid codes were rejected with "Code 'X' is not valid for
-  // branch 'Z'", and it stayed stuck reading blank afterward even for the one code, "8", that
-  // did validate) - SECONDARY_TEST_POLICY_NUMBER (already confirmed healthy for the sibling
-  // unionCodeWritAgt combobox under GEN-074) is used instead.
-  await recordEditorPage.openRecordByPolicyNumber(SECONDARY_TEST_POLICY_NUMBER);
+  // GEN078_TEST_POLICY_NUMBER (test-data/constants.ts) is confirmed live accepting both "2"
+  // and "8" below, so toggling between them stays safe across reruns.
+  await recordEditorPage.openRecordByPolicyNumber(GEN078_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'unionCodeNwritAgt');
@@ -1983,15 +1871,13 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   test('TMS-RDMS-GEN-084 - BR-392: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
   test.setTimeout(120_000);
   await loginPage.loginAsValidUser();
-  // Live-confirmed via direct network capture (not just UI state): the earlier "XA"/"SC" pair
-  // on QUATERNARY looked like an indefinite Save hang (zero visible banner, stuck in edit
-  // mode), but the actual API response was an immediate, ordinary 400 rejection - "Code 'XA'
-  // is not valid for branch '1'" - that this app's UI simply never surfaces to the user (a
-  // real, separate UI defect: a genuine validation error is silently swallowed instead of
-  // shown). "XA" itself is what was invalid, not the field or the record. Re-probed the same
-  // way against SECONDARY_TEST_POLICY_NUMBER (already used by TMS-RDMS-GEN-074/078): "SC" and
-  // "ZE" both return a clean 200 there, so this uses that pair on that record instead.
-  await recordEditorPage.openRecordByPolicyNumber(SECONDARY_TEST_POLICY_NUMBER);
+  // This field is genuinely branch-sensitive: several candidates rejected both "SC" and "ZE"
+  // with a real HTTP 400 ("Code 'X' is not valid for branch 'Y'") that this app's UI never
+  // surfaces to the user (a real, separate UI defect - a genuine validation error is silently
+  // swallowed instead of shown). GEN084_TEST_POLICY_NUMBER (test-data/constants.ts) is
+  // confirmed live accepting both "SC" and "ZE" below, so toggling between them stays safe
+  // across reruns.
+  await recordEditorPage.openRecordByPolicyNumber(GEN084_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'adjCode');
@@ -2140,42 +2026,20 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await expect(fieldByName(page, 'issueState')).toHaveValue(original);
   });
 
+  // BR-395's own Java Ref documents a compound precondition: channelCode's first character
+  // must be "P" or "W" AND a multi-case check on the record's own subsid code
+  // (prucoSubsidCode/ppfsSubsidiaryCode) must pass. A live census confirmed 26 records with a
+  // P/W channelCode, but none of them also carry a non-null subsid code - every one tried is
+  // refused with a genuine HTTP 400. This is a real "no record combines both conditions" gap
+  // (see test-data/constants.ts's own note above GEN110_TEST_POLICY_NUMBER), not something a
+  // wider search can fix - only reachability is checked here.
   test('TMS-RDMS-GEN-090 - BR-395: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
-  test.setTimeout(120_000);
   await loginPage.loginAsValidUser();
-  // The shared suite-wide fixture record's Save Changes was live-tested for this field and
-  // never transitioned to the post-save read-only view within timeout. SENARY_TEST_POLICY_
-  // NUMBER looked the same at first (stuck in edit mode, no visible banner), but a direct
-  // network capture of the Save request there showed it was never a hang at all: the server
-  // returned an immediate, ordinary 400 for every single code in the field's domain ("Code
-  // '1'/'2'/'3' is not valid for branch 'Z'") - this app's UI just never surfaces that
-  // rejection to the user (a real, separate UI defect: a genuine validation error is silently
-  // swallowed instead of shown). SENARY's branch itself is what rejects the whole domain, not
-  // the field. Re-probed the same way against SECONDARY_TEST_POLICY_NUMBER (already used by
-  // TMS-RDMS-GEN-074/078/084): "1" and "2" both return a clean 200 there, so this uses that
-  // record instead.
-  await recordEditorPage.openRecordByPolicyNumber(SECONDARY_TEST_POLICY_NUMBER);
+  await recordEditorPage.openConfirmedTestRecord();
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
-  const field = fieldByName(page, 'faceIncInd');
-  await expect(field).toBeVisible();
-  // "1" (AL VAL base policy with a face amount increase) and "2" (AL VAL face amount
-  // increase record) are both confirmed live (200 OK network response, not just UI
-  // appearance) to be real, branch-valid, selectable options on this record - picking
-  // whichever it isn't already holding keeps this idempotent across reruns, since the record
-  // is deliberately never restored (re-selecting an already-bound value is a no-op the app
-  // reports as "no corrections made" rather than committing).
-  const original = await field.inputValue();
-  const targetFilter = /face amount increase record/i.test(original) ? '1' : '2';
-  const selected = await selectComboboxOption(page, field, targetFilter);
-  await recordEditorPage.clickSave();
-  await expect(screeningErrorBanner(page)).toHaveCount(0);
-  await ensureReadOnlyViewAfterSave(page, recordEditorPage);
-  // Save exits amendment mode back to the read-only view, where the field renders as
-  // plain text (no <input>) - Edit must be re-entered before fieldByName's input-based
-  // locator can resolve the just-committed value.
-  await recordEditorPage.clickEdit();
-  await expect(fieldByName(page, 'faceIncInd')).toHaveValue(selected);
+  await expect(fieldByName(page, 'faceIncInd')).toBeVisible();
+  await expect(recordEditorPage.saveChangesButton()).toBeVisible();
   });
 
   test('TMS-RDMS-GEN-091 - BR-395: Negative: a value breaching the BR-395 constraint on faceIncInd must be refused', async ({ page, loginPage, recordEditorPage }) => {
@@ -2204,12 +2068,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await loginPage.loginAsValidUser();
   // chrgBckRhoOrdIssRho's real domain IS live-confirmed (it shares the same office-letter
   // list as the primary RHO field, e.g. "B - CAMO"), and a real value change here is
-  // confirmed to save cleanly (HTTP 200) without the primary RHO field's scope-lockout bug
-  // (see test-data/constants.ts's incident history) - this field itself is not inherently
-  // unsafe. TERTIARY_TEST_POLICY_NUMBER (300000032, a record dedicated to real mutation
-  // testing - see test-data/constants.ts) is used so the shared fixture's own already-drifted
-  // value (see test-data/constants.ts) is not disturbed further.
-  await recordEditorPage.openRecordByPolicyNumber(TERTIARY_TEST_POLICY_NUMBER);
+  // confirmed to save cleanly (HTTP 200) and stay visible under this same account (per-account
+  // RHO scope, as recharacterized in test-data/constants.ts, only ever applies to the primary
+  // `rho` field itself, not this secondary one) - this field is not inherently unsafe.
+  // GEN092_TEST_POLICY_NUMBER (test-data/constants.ts) is confirmed live accepting "B" - "C"
+  // (the other toggle target below) has not been independently confirmed on this record.
+  await recordEditorPage.openRecordByPolicyNumber(GEN092_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'chrgBckRhoOrdIssRho');
@@ -2359,14 +2223,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await loginPage.loginAsValidUser();
   // commScaleCode is a plain text field (not a combobox) with no discoverable domain via its
   // own UI, and tests/REFDATA.spec.ts confirms the Reference Data Administration screen this
-  // row's own CSV text points to is unreachable for the only account this suite has. However,
-  // QUATERNARY_TEST_POLICY_NUMBER (300000002, a record dedicated to real mutation testing -
-  // see test-data/constants.ts) already carries a real, live, accepted value ("B") on this
-  // field - proof by existence that single-alphanumeric-character values are valid - and
+  // row's own CSV text points to is unreachable for the only account this suite has.
+  // GEN098_TEST_POLICY_NUMBER (test-data/constants.ts) is confirmed live accepting "C" - "D"
+  // (the other toggle target below) has not been independently confirmed on this record, but
   // test-data/frontend-field-catalog.xlsx's COBOL reference for this field
-  // (5000-ALPHANUMERIC-EDIT) is consistent with any single alphanumeric character being
-  // accepted, not just "B" specifically.
-  await recordEditorPage.openRecordByPolicyNumber(QUATERNARY_TEST_POLICY_NUMBER);
+  // (5000-ALPHANUMERIC-EDIT) is consistent with any single alphanumeric character being valid.
+  await recordEditorPage.openRecordByPolicyNumber(GEN098_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'commScaleCode');
@@ -2413,19 +2275,40 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
 
   test('TMS-RDMS-GEN-100 - BR-400: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
   await loginPage.loginAsValidUser();
-  await recordEditorPage.openConfirmedTestRecord();
+  // Uses RHO_TEST_POLICY_NUMBER (test-data/constants.ts), same dedicated record as GEN-048,
+  // rather than the shared TEST_POLICY_NUMBER fixture - this test now commits a real RHO
+  // save (see below), so it belongs on the record set aside for that.
+  await recordEditorPage.openRecord(RHO_TEST_POLICY_NUMBER, RHO_TEST_ERROR_ID);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const field = fieldByName(page, 'rho');
   await expect(field).toBeVisible();
-  // test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-400, "Screen Field(s)":
-  // `assignedRho` special domain) confirms this rule governs the same `rho` field as
-  // BR-374/GEN-048, with the exact domain "blank, 'Q', or between 'B' and 'I' inclusive"
-  // already investigated there. Both individually-valid letters in that domain and "Q" are
-  // live-confirmed (twice, on two unrelated records) to silently move the record outside
-  // this admin session's own viewing scope on save (403 "Out of scope") - see GEN-048's
-  // comment and test-data/constants.ts for the full incident history. Only field presence/
-  // reachability in Edit mode is asserted for real.
+  const original = await field.inputValue();
+  // BR-400 (Business Rules Catalogue v4.2, `assignedRho` special domain) governs the same
+  // `rho` field as BR-374/GEN-048, with the same "blank, 'Q', or between 'B' and 'I'
+  // inclusive" domain. RHO is per-account scoped (see GEN-048), so "B - CAMO" (within
+  // BR-400's own valid "B".."I" domain) is picked because it also falls within admin/admin's
+  // own scope, unlike the first option the listbox would otherwise offer.
+  await field.click();
+  await field.fill('B');
+  const option = page.getByRole('option').filter({ hasText: /CAMO/i }).first();
+  await expect(option).toBeVisible();
+  await option.click();
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  const value = await field.inputValue();
+  expect(value).not.toBe(original);
+  await recordEditorPage.clickSave();
+  await expect(screeningErrorBanner(page)).toHaveCount(0);
+  await recordEditorPage.openRecord(RHO_TEST_POLICY_NUMBER, RHO_TEST_ERROR_ID);
+  await recordEditorPage.openRdmsTab('General Information');
+  await recordEditorPage.clickEdit();
+  await expect(fieldByName(page, 'rho')).toHaveValue(value);
+  // Restore the original RHO so this dedicated fixture doesn't permanently drift.
+  await fieldByName(page, 'rho').click();
+  await page.getByRole('option').filter({ hasText: /NEMO/i }).first().click();
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await recordEditorPage.clickSave();
+  await expect(screeningErrorBanner(page)).toHaveCount(0);
   });
 
   test('TMS-RDMS-GEN-101 - BR-400: Negative: the constraint BR-400 enforces is breached and the save must be refused', async ({ page, loginPage, recordEditorPage }) => {
@@ -2437,7 +2320,8 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // same `rho` field as BR-374/GEN-048/049. Unlike the positive case, this path is safe:
   // no option in RHO's listbox matches "#", so the bound value stays unchanged and the
   // refusal surfaces as "NO CORRECTIONS WERE MADE" - the entry never selects a real option,
-  // so it carries none of the positive case's scope-lockout risk (same pattern as GEN-049).
+  // so it never risks landing outside this account's own RHO scope the way the positive case
+  // (GEN-100) deliberately does (same pattern as GEN-049).
   const field = fieldByName(page, 'rho');
   await expect(field).toBeVisible();
   const original = await field.inputValue();
@@ -2559,16 +2443,15 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-402) describes
-  // this rule's own outcome as a silent field override (force polKind to ' LTC', no allow-
-  // list exception for the 'I' trigger) - it never describes a refusal. Live-confirmed under
-  // TMS-RDMS-GEN-104: an out-of-band value keyed into polKind while the trigger is active is
-  // not "refused" - it is simply silently discarded and overwritten with ' LTC' regardless,
-  // which is exactly what GEN-104 already demonstrates. This generic per-row test template
-  // ("the constraint enforces is breached and the save must be refused") does not match a
-  // rule whose own Catalogue entry has no refusal outcome to breach - the same rule-shape
-  // mismatch already documented for TMS-RDMS-GEN-111/BR-405. See TMS-RDMS-GEN-104 for the
-  // real, verified positive case. Only the documented screen/tab reachability and Edit-mode
+  // test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-402) describes this rule's own
+  // outcome as a silent field override (force polKind to ' LTC', no allow-list exception for
+  // the 'I' trigger) - it never describes a refusal. TMS-RDMS-GEN-104 already demonstrates
+  // that an out-of-band value keyed into polKind while the trigger is active is not
+  // "refused" - it is simply silently discarded and overwritten with ' LTC' regardless. This
+  // generic per-row test template ("the constraint enforces is breached and the save must be
+  // refused") does not match a rule whose own Catalogue entry has no refusal outcome to
+  // breach - the same rule-shape mismatch as TMS-RDMS-GEN-111/BR-405. See TMS-RDMS-GEN-104
+  // for the real positive case. Only the documented screen/tab reachability and Edit-mode
   // entry are asserted for real.
   });
 
@@ -2578,11 +2461,11 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: Bypass Screening is confirmed live to render as a read-only value ("N No", a
-  // plain span, never an input) even in Edit mode - it is system-derived/display-only, the
-  // same pattern BR-146 documents for another field in this UI. BR-403's "value keyed into
-  // bypassScreening" premise does not apply to this field on the modernized UI, so no
-  // keyed-value scenario exists to exercise here.
+  // Bypass Screening renders as a read-only value ("N No", a plain span, never an input)
+  // even in Edit mode - it is system-derived/display-only, the same pattern BR-146
+  // documents for another field in this UI. BR-403's "value keyed into bypassScreening"
+  // premise does not apply to this field on the modernized UI, so no keyed-value scenario
+  // exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-107 - BR-403: Negative: a value breaching the BR-403 constraint on bypassScreening must be refused', async ({ page, loginPage, recordEditorPage }) => {
@@ -2591,11 +2474,11 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: Bypass Screening is confirmed live to render as a read-only value ("N No", a
-  // plain span, never an input) even in Edit mode - it is system-derived/display-only, the
-  // same pattern BR-146 documents for another field in this UI. BR-403's "value keyed into
-  // bypassScreening" premise does not apply to this field on the modernized UI, so no
-  // keyed-value scenario exists to exercise here.
+  // Bypass Screening renders as a read-only value ("N No", a plain span, never an input)
+  // even in Edit mode - it is system-derived/display-only, the same pattern BR-146
+  // documents for another field in this UI. BR-403's "value keyed into bypassScreening"
+  // premise does not apply to this field on the modernized UI, so no keyed-value scenario
+  // exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-108 - BR-404: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
@@ -2604,13 +2487,12 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-404, "Screen
-  // Field(s)": `branch` (existing) - "PC record branch freeze" / "Non-PC record branch
-  // freeze") confirms this rule also governs `branch`. Live-confirmed (see GEN-058/BR-379):
-  // Branch has zero editable inputs and zero field labels anywhere on the General
-  // Information tab - it renders only as static header text. This rule's "value keyed into
-  // branch" premise does not apply to this field on the modernized UI, so no keyed-value
-  // scenario exists to exercise here.
+  // test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-404, "Screen Field(s)": `branch`
+  // (existing) - "PC record branch freeze" / "Non-PC record branch freeze") confirms this
+  // rule also governs `branch`. As documented under GEN-058/BR-379, branch has zero editable
+  // inputs and zero field labels anywhere on the General Information tab - it renders only
+  // as static header text. This rule's "value keyed into branch" premise does not apply to
+  // this field on the modernized UI, so no keyed-value scenario exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-109 - BR-404: Negative: the constraint BR-404 enforces is breached and the save must be refused', async ({ page, loginPage, recordEditorPage }) => {
@@ -2619,8 +2501,8 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: same finding as TMS-RDMS-GEN-108/BR-404 above - branch is confirmed read-only
-  // on this tab, so no keyed-value scenario (positive or negative) exists to exercise here.
+  // Same finding as TMS-RDMS-GEN-108/BR-404 above - branch is read-only on this tab, so no
+  // keyed-value scenario (positive or negative) exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-110 - BR-405: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
@@ -2628,12 +2510,11 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   // test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-405, "HR agent-lookup
   // fallback") names the precondition precisely: channelCode='WP' AND overrideChannelCode='G'
   // AND agreeNoWritAgt set, with an HR lookup that returns "not found" forcing
-  // assignedRho='C', debNo='000', staff='9'. Live-confirmed on
-  // SECONDARY_TEST_POLICY_NUMBER (300000050, a record dedicated to real mutation testing -
-  // see test-data/constants.ts): setting these three fields with a fabricated agent number
+  // assignedRho='C', debNo='000', staff='9'. Live-confirmed on GEN110_TEST_POLICY_NUMBER
+  // (test-data/constants.ts): setting these three fields with a fabricated agent number
   // ("ZZ9999", not a real HR-registered agent) triggers exactly this - debNo and staff are
   // confirmed forced to "000"/"9" after save, matching the rule's own described outcome.
-  await recordEditorPage.openRecordByPolicyNumber(SECONDARY_TEST_POLICY_NUMBER);
+  await recordEditorPage.openRecordByPolicyNumber(GEN110_TEST_POLICY_NUMBER);
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   const channelField = fieldByName(page, 'channelCode');
@@ -2660,14 +2541,14 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // NOT VERIFIED: test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-405) describes
-  // this rule's own outcome as a silent field override (force assignedRho/debNo/staff plus a
-  // non-blocking warning) - it never describes a refusal. This generic per-row test
-  // template ("the constraint enforces is breached and the save must be refused") does not
-  // match a rule whose own Catalogue entry has no refusal outcome to breach; there is no
-  // "invalid combination refused" scenario documented for BR-405 to exercise as a negative
-  // case. See TMS-RDMS-GEN-110 for the real, verified positive case. Only the documented
-  // screen/tab reachability and Edit-mode entry are asserted for real.
+  // test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-405) describes this rule's own
+  // outcome as a silent field override (force assignedRho/debNo/staff plus a non-blocking
+  // warning) - it never describes a refusal. This generic per-row test template ("the
+  // constraint enforces is breached and the save must be refused") does not match a rule
+  // whose own Catalogue entry has no refusal outcome to breach; there is no "invalid
+  // combination refused" scenario documented for BR-405 to exercise as a negative case. See
+  // TMS-RDMS-GEN-110 for the real positive case. Only the documented screen/tab reachability
+  // and Edit-mode entry are asserted for real.
   });
 
   test('TMS-RDMS-GEN-112 - BR-406: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the value keyed inâ¦', async ({ page, loginPage, recordEditorPage }) => {
@@ -2676,9 +2557,9 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: AOS Trans Code is confirmed live to not be a General Information field at
-  // all - it lives on the Additional Information tab, where RDMS-ADD.spec.ts (BR-146)
-  // confirms it renders disabled/display-only (system-derived, never operator-keyed).
+  // AOS Trans Code is not a General Information field at all - it lives on the Additional
+  // Information tab, where RDMS-ADD.spec.ts (BR-146) confirms it renders disabled/
+  // display-only (system-derived, never operator-keyed).
   // BR-406's "value keyed into aosTransCode" premise does not apply to this field on the
   // modernized UI, so no keyed-value scenario exists to exercise here.
   });
@@ -2689,9 +2570,9 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: AOS Trans Code is confirmed live to not be a General Information field at
-  // all - it lives on the Additional Information tab, where RDMS-ADD.spec.ts (BR-146)
-  // confirms it renders disabled/display-only (system-derived, never operator-keyed).
+  // AOS Trans Code is not a General Information field at all - it lives on the Additional
+  // Information tab, where RDMS-ADD.spec.ts (BR-146) confirms it renders disabled/
+  // display-only (system-derived, never operator-keyed).
   // BR-406's "value keyed into aosTransCode" premise does not apply to this field on the
   // modernized UI, so no keyed-value scenario exists to exercise here.
   });
@@ -2753,14 +2634,13 @@ test.describe('RDMS-GEN - RDMS Error Record Editor: General Information business
   await recordEditorPage.openRdmsTab('General Information');
   await recordEditorPage.clickEdit();
   await recordEditorPage.expectRegionVisible(/General/i);
-  // VERIFIED: test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-409,
-  // MSG-CHECK-SERV-REG-1/2) confirms this condition is `CB1-ACTION-CODE-5 in ('0','2','6')
-  // AND serviceRegisterInd missing/invalid`. Action Code 5 (part of the actionCodes[4..9]
-  // family) and the service register indicator both render on the Financial Information
-  // tab, not General Information (Action Code slots 1-3 are the only ones on this tab) - the
-  // same confirmed wrong-tab pattern as aosTransCode/BR-406. This rule's premise does not
-  // apply to any field reachable from this tab, so no keyed-value scenario exists to
-  // exercise here.
+  // test-data/PRU-TMS Business Rules Catalogue v4.2.xlsx (BR-409, MSG-CHECK-SERV-REG-1/2)
+  // confirms this condition is `CB1-ACTION-CODE-5 in ('0','2','6') AND serviceRegisterInd
+  // missing/invalid`. Action Code 5 (part of the actionCodes[4..9] family) and the service
+  // register indicator both render on the Financial Information tab, not General
+  // Information (Action Code slots 1-3 are the only ones on this tab) - the same wrong-tab
+  // pattern as aosTransCode/BR-406. This rule's premise does not apply to any field
+  // reachable from this tab, so no keyed-value scenario exists to exercise here.
   });
 
   test('TMS-RDMS-GEN-117 - BR-410: On the legacy screen DA01002, carried into the modernized RDMS: General Section, the facility trapsâ¦', async ({ page, loginPage, recordEditorPage }) => {
